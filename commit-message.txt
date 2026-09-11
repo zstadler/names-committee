@@ -1,0 +1,10 @@
+Add Yalkut HaPirsumim names-committee OCR parser
+
+1. ocr_parser.py provides render, denoise, OCR word boxes and letter boxes, and the field regexes.
+2. ocr_parser2.py is the parser: header detection, horizontal slices, column split by the printed separator, line grouping from letter-box geometry, and the entry state machine.
+3. run_batch_600dpi parses pages in parallel and stitches them in order; build_v3_output writes the workbook.
+4. Pages are rendered at 600dpi; OMP_THREAD_LIMIT is pinned to 1 because Tesseract's OpenMP measured 3.5x slower with byte-identical output.
+5. Four quality checks emit warnings: possible-skipped-name, large-gap-continuation, unrecognized-text, name-gap-suspicious.
+6. Issue 2633 yields 564 entries across all 11 categories; settlements 184 and historical sites 27 match a manual count of the source.
+7. Grid references: 534 extracted, 518 well-formed, 16 flagged as OCR digit errors.
+8. PROJECT_NOTES.md carries the full specification and development log, including rejected approaches.

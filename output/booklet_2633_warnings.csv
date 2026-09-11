@@ -1,0 +1,34 @@
+עמוד,טור,סוג,טקסט
+1,right,unrecognized-text,discarded as noise at y=1789: '33' (h=76 w=128 conf=76)
+2,-,gutter-fallback,slice 0
+2,right,large-gap-continuation,ה --
+2,right,large-gap-continuation,"ג י""ם, תשי""א, עמ' 858."
+2,left,large-gap-continuation,ב;
+2,left,large-gap-continuation,"! עד שמונה ספרות, שמהן שלוש או ארבע משמאל מציינות קו"
+3,-,gutter-fallback,slice 0
+6,right,unrecognized-text,discarded as noise at y=243: 'וו' (h=71 w=98 conf=27)
+9,right,unrecognized-text,discarded as noise at y=290: '-.' (h=53 w=110 conf=63)
+10,right,unrecognized-text,discarded as noise at y=299: 'ז' (h=52 w=62 conf=29)
+11,right,unrecognized-text,discarded as noise at y=323: 'סי' (h=79 w=66 conf=48)
+14,-,gutter-fallback,slice 0
+14,right,unrecognized-text,line used by no entry at y=419: '5]' (h=40)
+16,-,gutter-fallback,slice 0
+22,-,gutter-fallback,slice 0
+22,left,large-gap-continuation,-
+25,-,landscape-page-skipped,7084x2377
+6,left,coords-format,כַלֶנית: 930.2585
+6,left,coords-format,כסִיפָה: 15800.07125
+9,left,coords-format,פלך: 1724.200
+11,right,coords-format,רְמוּת: 251.1213
+12,right,coords-format,תמר: 19178.15825
+12,left,coords-format,"סקואַ לה"" 6: 17174.11752"
+12,left,coords-format,בית חורון עליון: 1610.14
+14,right,coords-format,חֶרֶשַת טל: 211.91
+14,right,coords-format,"חרש בן""זמרה: 21"
+14,left,coords-format,נחל מצר: 2185.288
+16,left,coords-format,הר אַגָס: 2185.800
+20,left,coords-format,הר צַרור: 132.0800
+23,right,coords-format,צומת דֶליות: 224.2859
+23,left,coords-format,צומת בָּר אִילֶן: 1348.168
+23,left,coords-format,צומת רעְננה: 1896.17601
+24,left,coords-format,צומת דימר;ה: 1505.05340

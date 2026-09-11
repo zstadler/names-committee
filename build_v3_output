@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""Build the Excel output (one sheet in source order + warnings) from the batch runner's JSONL results.
+
+Usage:
+  build_v3_output [--work=<dir>] [--booklet=<n>] [--date=<d>] [--out=<dir>] [--tag=<t>]
+
+Options:
+  --work=<dir>     Work directory holding entries_600dpi.jsonl / warnings_600dpi.jsonl [default: scan]
+  --booklet=<n>    Booklet number written into every row [default: 2633]
+  --date=<d>       Publication date written into every row [default: 1980-06-10]
+  --out=<dir>      Output directory [default: .]
+  --tag=<t>        Tag embedded in the output file name [default: rebuild]
+"""
+import json
+import os
+import time
+from ocr_parser import ensure_package
+
+docopt = ensure_package("docopt")
+openpyxl = ensure_package("openpyxl")
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Alignment, Font, PatternFill
+
+BODY_FONT = "Arial"
+RED_YELLOW_DEFAULT = 60
+YELLOW_GREEN_DEFAULT = 80
+COLUMNS = [
+  ("קטגוריה", "category"),
+  ("שם רשמי (עברית)", "name"),
+  ("תנועה מיישבת", "movement"),
+  ('נ"צ', "coords"),
+  ("תיאור/מיקום חופשי", "body"),
+  ("מספר גיליון", "booklet"),
+  ("תאריך פרסום", "date"),
+  ("עמוד", "page"),
+  ("טור", "column"),
+  ("ציון OCR", "ocr_min"),
+  ("ציון OCR ממוצע", "ocr_avg"),
+  ("מילה עם הציון הנמוך", "ocr_lowest_word"),
+]
+
+
+def read_jsonl(path):
+  """Read a JSON-lines file into a list (empty when missing)."""
+  if not os.path.exists(path):
+    return []
+  with open(path, encoding="utf-8") as f:
+    return [json.loads(line) for line in f if line.strip()]
+
+
+def set_cell(ws, row, col, value):
+  """Write one cell, keeping OCR text as text even when it starts with '=' (openpyxl would store a formula)."""
+  cell = ws.cell(row=row, column=col, value=value)
+  if isinstance(value, str):
+    cell.data_type = "s"
+  cell.font = Font(name=BODY_FONT)
+  return cell
+
+
+def write_list_sheet(ws, entries, booklet, date):
+  """Write one output list: editable threshold cells in row 1, headers in row 2, data below."""
+  ws.sheet_view.rightToLeft = True
+  ws["A1"] = "סף אדום/צהוב"
+  ws["B1"] = RED_YELLOW_DEFAULT
+  ws["C1"] = "סף צהוב/ירוק"
+  ws["D1"] = YELLOW_GREEN_DEFAULT
+  for col, (title, _) in enumerate(COLUMNS, start=1):
+    set_cell(ws, 2, col, title).font = Font(name=BODY_FONT, bold=True)
+  for r, e in enumerate(entries, start=3):
+    for col, (_, key) in enumerate(COLUMNS, start=1):
+      value = e.get(key)
+      if key == "booklet":
+        value = booklet
+      if key == "date":
+        value = date
+      if key in ("ocr_min", "ocr_avg") and value is not None:
+        value = round(value, 1)
+      cell = set_cell(ws, r, col, value)
+      cell.alignment = Alignment(wrap_text=(key == "body"), vertical="top")
+  last = len(entries) + 2
+  score_col = openpyxl.utils.get_column_letter([k for _, k in COLUMNS].index("ocr_min") + 1)
+  rng = "%s3:%s%d" % (score_col, score_col, max(last, 3))
+  ws.conditional_formatting.add(rng, FormulaRule(formula=["%s3<$B$1" % score_col], fill=PatternFill("solid", fgColor="F4CCCC")))
+  ws.conditional_formatting.add(rng, FormulaRule(formula=["AND(%s3>=$B$1,%s3<$D$1)" % (score_col, score_col)], fill=PatternFill("solid", fgColor="FFF2CC")))
+  ws.conditional_formatting.add(rng, FormulaRule(formula=["%s3>=$D$1" % score_col], fill=PatternFill("solid", fgColor="D9EAD3")))
+  ws.column_dimensions["B"].width = 28
+  ws.column_dimensions["E"].width = 80
+  ws.freeze_panes = "A3"
+
+
+def write_warnings_sheet(ws, warnings):
+  """Write the warnings tab for manual review."""
+  ws.sheet_view.rightToLeft = True
+  for col, title in enumerate(["עמוד", "טור", "סוג", "טקסט"], start=1):
+    set_cell(ws, 1, col, title).font = Font(name=BODY_FONT, bold=True)
+  for r, w in enumerate(warnings, start=2):
+    for col, key in enumerate(["page", "column", "type", "text"], start=1):
+      set_cell(ws, r, col, w.get(key))
+
+
+def main():
+  """Entry point: write every entry to one sheet in source order, plus the warnings sheet."""
+  args = docopt.docopt(__doc__)
+  work = args["--work"]
+  entries = read_jsonl(os.path.join(work, "entries_600dpi.jsonl"))
+  warnings = read_jsonl(os.path.join(work, "warnings_600dpi.jsonl"))
+  entries = [e for e in entries if e.get("category")]
+  entries.sort(key=lambda e: e["page"])
+  wb = openpyxl.Workbook()
+  ws = wb.active
+  ws.title = "רשימת שמות"
+  write_list_sheet(ws, entries, args["--booklet"], args["--date"])
+  write_warnings_sheet(wb.create_sheet("אזהרות"), warnings)
+  stamp = time.strftime("%Y%m%d_%H%M%S")
+  out_path = os.path.join(args["--out"], "booklet_%s_%s_%s.xlsx" % (args["--booklet"], args["--tag"], stamp))
+  wb.save(out_path)
+  print("%s: %d entries, %d warnings" % (out_path, len(entries), len(warnings)))
+
+
+if __name__ == "__main__":
+  main()

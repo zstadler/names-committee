@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Run the 600dpi parser over a booklet, one file per page, then stitch the pages in order.
+
+Pages are parsed independently (each starts as if continuing an open entry, with its
+leading category unresolved) so they can run in parallel; reconcile_pages then walks them
+in order to resolve carried categories and rejoin descriptions split across page breaks.
+
+Usage:
+  run_batch_600dpi [--pdf=<path>] [--booklet=<n>] [--budget=<sec>] [--jobs=<n>] [--stage1=<xlsx>] [--work=<dir>] [--reset]
+
+Options:
+  --pdf=<path>      Booklet PDF [default: samples/booklet_2633.pdf]
+  --booklet=<n>     Booklet number used for the stage1 threshold lookup [default: 2633]
+  --budget=<sec>    Stop starting new pages after this many seconds [default: 240]
+  --jobs=<n>        Pages to parse in parallel [default: 2]
+  --stage1=<xlsx>   Input list workbook holding stored thresholds [default: stage1_input_clean.xlsx]
+  --work=<dir>      Work directory for renders, per-page results and state [default: scan]
+  --reset           Discard previous results before running
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+from ocr_parser import ensure_package
+import ocr_parser2 as p2
+
+docopt = ensure_package("docopt")
+openpyxl = ensure_package("openpyxl")
+CALIBRATION_PAGES = [3, 4]
+THRESHOLD_COL_HEADER = "סף הפרדה שם/תיאור (אותיות)"
+METHOD_COL_HEADER = "שיטת הקביעה"
+BOOKLET_COL_HEADER = "מספר ילקוט הפרסומים"
+AUTO_METHOD_LABEL = "אוטומטי (calibrate_document_threshold)"
+
+
+def page_count(pdf_path):
+  """Number of pages in a PDF via pdfinfo."""
+  out = subprocess.run(["pdfinfo", pdf_path], capture_output=True, text=True).stdout
+  for line in out.splitlines():
+    if line.startswith("Pages:"):
+      return int(line.split()[1])
+  raise RuntimeError("pdfinfo gave no page count for %s" % pdf_path)
+
+
+def stage1_columns(ws):
+  """Map header text to 1-based column index on the stage1 input sheet."""
+  return {c.value: c.column for c in ws[1] if c.value}
+
+
+def load_stored_threshold(stage1_path, booklet):
+  """Threshold stored in stage1_input_clean for this booklet, or None."""
+  wb = openpyxl.load_workbook(stage1_path)
+  ws = wb.worksheets[0]
+  cols = stage1_columns(ws)
+  for row in ws.iter_rows(min_row=2):
+    if str(row[cols[BOOKLET_COL_HEADER] - 1].value) == str(booklet):
+      value = row[cols[THRESHOLD_COL_HEADER] - 1].value
+      return float(value) if value not in (None, "") else None
+  return None
+
+
+def save_threshold_to_stage1(stage1_path, booklet, threshold):
+  """Write an automatically calibrated threshold back to stage1_input_clean with its method label."""
+  wb = openpyxl.load_workbook(stage1_path)
+  ws = wb.worksheets[0]
+  cols = stage1_columns(ws)
+  for row in ws.iter_rows(min_row=2):
+    if str(row[cols[BOOKLET_COL_HEADER] - 1].value) == str(booklet):
+      row[cols[THRESHOLD_COL_HEADER] - 1].value = threshold
+      row[cols[METHOD_COL_HEADER] - 1].value = AUTO_METHOD_LABEL
+  wb.save(stage1_path)
+
+
+def write_atomic(path, text):
+  """Write text to path atomically (temp file + rename)."""
+  tmp = path + ".tmp"
+  with open(tmp, "w", encoding="utf-8") as f:
+    f.write(text)
+    f.flush()
+    os.fsync(f.fileno())
+  os.replace(tmp, path)
+
+
+def page_result_path(work, page):
+  """Path of one page's stored parse result."""
+  return os.path.join(work, "pages", "page_%03d.json" % page)
+
+
+def parse_one_page(job):
+  """Parse a single page independently and store its result; returns a short progress line."""
+  pdf_path, page, threshold, work = job
+  t0 = time.time()
+  result = p2.parse_page_v2(pdf_path, page, threshold, work,
+    carried_category=p2.PENDING_CATEGORY,
+    open_entry=p2.continuation_placeholder(page, p2.PENDING_CATEGORY, "right"))
+  write_atomic(page_result_path(work, page), json.dumps(result, ensure_ascii=False))
+  return "page %d: %d entries, %d warnings, headers=%s, %.0fs" % (
+    page, len(result["entries"]), len(result["warnings"]), [h["category"] for h in result["headers"]], time.time() - t0)
+
+
+def resolve_category(value, carried):
+  """Replace the placeholder category of a page's opening slice with the category carried into it."""
+  return carried if value == p2.PENDING_CATEGORY else value
+
+
+def reconcile_pages(work, total):
+  """Walk stored page results in order, resolving carried categories and cross-page open entries."""
+  entries = []
+  warnings = []
+  category = None
+  open_entry = None
+  for page in range(1, total + 1):
+    path = page_result_path(work, page)
+    if not os.path.exists(path):
+      continue
+    with open(path, encoding="utf-8") as f:
+      result = json.load(f)
+    warnings.extend(result["warnings"])
+    fragment = result.get("leading_fragment")
+    if fragment is not None and fragment["name"] is None and open_entry is not None:
+      p2.merge_fragment(open_entry, fragment)
+    if result["entries"] or result["open_entry"] is not None:
+      if open_entry is not None:
+        entries.append(p2.finish_entry(open_entry))
+        open_entry = None
+    for e in result["entries"]:
+      e["category"] = resolve_category(e["category"], category)
+      entries.append(e)
+    if result["open_entry"] is not None:
+      open_entry = result["open_entry"]
+      open_entry["category"] = resolve_category(open_entry["category"], category)
+    category = resolve_category(result["category"], category)
+  if open_entry is not None:
+    entries.append(p2.finish_entry(open_entry))
+  entries = [e for e in entries if e["category"]]
+  warnings.extend(p2.check_name_gaps(entries))
+  warnings.extend(p2.check_coords_format(entries))
+  return entries, warnings
+
+
+def resolve_threshold(args, work):
+  """Threshold for this booklet: stored value when present, otherwise calibrate and store it."""
+  threshold = load_stored_threshold(args["--stage1"], args["--booklet"])
+  if threshold is not None:
+    print("threshold loaded from stage1_input_clean: %s" % threshold)
+    return threshold
+  threshold, heights = p2.calibrate_document_threshold(args["--pdf"], CALIBRATION_PAGES, work)
+  print("calibrated threshold: %s (from %d lines)" % (threshold, len(heights)))
+  save_threshold_to_stage1(args["--stage1"], args["--booklet"], threshold)
+  return threshold
+
+
+def main():
+  """Entry point: parse the pages still missing (in parallel, within the budget), then stitch."""
+  args = docopt.docopt(__doc__)
+  work = args["--work"]
+  pdf_path = args["--pdf"]
+  jobs = int(args["--jobs"])
+  budget = float(args["--budget"])
+  os.makedirs(os.path.join(work, "pages"), exist_ok=True)
+  total = page_count(pdf_path)
+  if args["--reset"]:
+    for page in range(1, total + 1):
+      if os.path.exists(page_result_path(work, page)):
+        os.remove(page_result_path(work, page))
+  threshold = resolve_threshold(args, work)
+  pending = [p for p in range(1, total + 1) if not os.path.exists(page_result_path(work, p))]
+  started = time.time()
+  with ProcessPoolExecutor(max_workers=jobs) as pool:
+    for i in range(0, len(pending), jobs):
+      if time.time() - started >= budget:
+        break
+      chunk = [(pdf_path, page, threshold, work) for page in pending[i:i + jobs]]
+      for line in pool.map(parse_one_page, chunk):
+        print(line)
+        sys.stdout.flush()
+  done = [p for p in range(1, total + 1) if os.path.exists(page_result_path(work, p))]
+  entries, warnings = reconcile_pages(work, total)
+  write_atomic(os.path.join(work, "entries_600dpi.jsonl"), "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries))
+  write_atomic(os.path.join(work, "warnings_600dpi.jsonl"), "".join(json.dumps(w, ensure_ascii=False) + "\n" for w in warnings))
+  print("%d/%d pages parsed, %d entries, %d warnings, %.0fs" % (len(done), total, len(entries), len(warnings), time.time() - started))
+
+
+if __name__ == "__main__":
+  main()

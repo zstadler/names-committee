@@ -1,0 +1,7 @@
+scan/
+samples/
+/booklet_*.xlsx
+__pycache__/
+*.pyc
+*.swp
+*:Zone.Identifier
