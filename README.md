@@ -52,14 +52,15 @@ pins `OMP_THREAD_LIMIT=1` per worker and parallelises across pages instead.
 | `ocr_parser2.py` | the parser: headers, slices, column split, line grouping, entry state machine, checks |
 | `run_batch_600dpi` | per-page parallel runner and the page-stitching pass |
 | `build_v3_output` | Excel builder |
-| `PROJECT_NOTES.md` | full specification and development log, in Hebrew |
+| `PROJECT_NOTES.md` | entry point to the project notes, in Hebrew: goal, scope, input, results |
+| `docs/` | design decisions, open issues, rejected approaches, environment setup and traps, in Hebrew |
 | `data/stage1_input_clean.xlsx` | the 42 relevant issues, with PDF URLs and per-issue calibration - the parser reads this and writes calibrated thresholds back into it |
 | `data/stage1_input_clean.csv` | text export of the above, for diffing and quick viewing |
 | `data/stage1_removed_records.csv` | 33 issues filtered out in stage 1, kept for audit |
 | `output/booklet_2633_v28.xlsx` | current results for issue 2633: names in source order, plus a warnings sheet |
 | `output/booklet_2633_*.csv` | text export of the same results |
 
-`PROJECT_NOTES.md` is the authoritative document. The working environment was lost once, and
+`PROJECT_NOTES.md` and `docs/` are the authoritative documents. The working environment was lost once, and
 the code was rebuilt from those notes alone, so they are kept detailed on purpose: every
 threshold records how it was measured, and mechanisms that were tried and rejected are
 documented as rejected so they are not reintroduced.
