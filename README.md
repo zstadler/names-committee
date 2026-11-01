@@ -32,13 +32,14 @@ mkdir -p samples
 # download an issue PDF into samples/ (URLs are in data/stage1_input_clean.csv)
 ./run_batch_600dpi --pdf=samples/booklet_2633.pdf --booklet=2633 --jobs=2 --budget=3000 \
   --stage1=data/stage1_input_clean.xlsx
-./build_v3_output --booklet=2633 --date=1980-06-10 --tag=run --out=.
+./build_v3_output --booklet=2633 --date=1980-06-10 --out=output
 ```
 
 `run_batch_600dpi` writes one JSON file per page under `scan/pages/`, so an interrupted run
 resumes where it stopped; `--reset` discards them. It then stitches the pages in order into
 `scan/entries_600dpi.jsonl` and `scan/warnings_600dpi.jsonl`. `build_v3_output` turns those
-into a workbook: one sheet of names in source order, plus a warnings sheet.
+into `booklet_<n>_names.csv` (names in source order) and `booklet_<n>_warnings.csv`; with
+`--xlsx` it also writes an Excel workbook with the OCR score colouring.
 
 Set `--jobs` to the number of cores. Note that Tesseract's own OpenMP threading is
 counter-productive here (measured 3.5x slower at 600dpi with identical output), so the code
@@ -51,14 +52,14 @@ pins `OMP_THREAD_LIMIT=1` per worker and parallelises across pages instead.
 | `ocr_parser.py` | render, denoise, OCR (word boxes and letter boxes), field regexes |
 | `ocr_parser2.py` | the parser: headers, slices, column split, line grouping, entry state machine, checks |
 | `run_batch_600dpi` | per-page parallel runner and the page-stitching pass |
-| `build_v3_output` | Excel builder |
+| `build_v3_output` | output builder: names and warnings CSVs, optional Excel workbook |
 | `PROJECT_NOTES.md` | entry point to the project notes, in Hebrew: goal, scope, input, results |
 | `docs/` | design decisions, open issues, rejected approaches, environment setup and traps, in Hebrew |
 | `data/stage1_input_clean.xlsx` | the 42 relevant issues, with PDF URLs and per-issue calibration - the parser reads this and writes calibrated thresholds back into it |
 | `data/stage1_input_clean.csv` | text export of the above, for diffing and quick viewing |
 | `data/stage1_removed_records.csv` | 33 issues filtered out in stage 1, kept for audit |
-| `output/booklet_2633_v28.xlsx` | current results for issue 2633: names in source order, plus a warnings sheet |
-| `output/booklet_2633_*.csv` | text export of the same results |
+| `output/booklet_2633_names.csv` | current results for issue 2633: names in source order |
+| `output/booklet_2633_warnings.csv` | the warnings of the same run, for manual review |
 
 `PROJECT_NOTES.md` and `docs/` are the authoritative documents. The working environment was lost once, and
 the code was rebuilt from those notes alone, so they are kept detailed on purpose: every
@@ -83,7 +84,7 @@ The parser cannot be assumed correct, so each run emits warnings for manual revi
   heading on a page, where there are no two columns of content.
 
 Each entry also carries minimum and average OCR confidence and its weakest word, and the
-workbook colours the score column against two editable thresholds in row 1.
+optional workbook (`--xlsx`) colours the score column against two editable thresholds in row 1.
 
 ## Source
 

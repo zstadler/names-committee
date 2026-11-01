@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Build the Excel output (one sheet in source order + warnings) from the batch runner's JSONL results.
+"""Build the outputs (names and warnings CSVs in source order, optionally an Excel workbook) from the batch runner's JSONL results.
 
 Usage:
-  build_v3_output [--work=<dir>] [--booklet=<n>] [--date=<d>] [--out=<dir>] [--tag=<t>]
+  build_v3_output [--work=<dir>] [--booklet=<n>] [--date=<d>] [--out=<dir>] [--tag=<t>] [--xlsx]
 
 Options:
   --work=<dir>     Work directory holding entries_600dpi.jsonl / warnings_600dpi.jsonl [default: scan]
   --booklet=<n>    Booklet number written into every row [default: 2633]
   --date=<d>       Publication date written into every row [default: 1980-06-10]
   --out=<dir>      Output directory [default: .]
-  --tag=<t>        Tag embedded in the output file name [default: rebuild]
+  --tag=<t>        Tag embedded in the workbook file name [default: rebuild]
+  --xlsx           Also write an Excel workbook with the OCR score colouring
 """
+import csv
 import json
 import os
 import time
@@ -39,6 +41,12 @@ COLUMNS = [
   ("ציון OCR ממוצע", "ocr_avg"),
   ("מילה עם הציון הנמוך", "ocr_lowest_word"),
 ]
+WARNING_COLUMNS = [
+  ("עמוד", "page"),
+  ("טור", "column"),
+  ("סוג", "type"),
+  ("טקסט", "text"),
+]
 
 
 def read_jsonl(path):
@@ -58,6 +66,39 @@ def set_cell(ws, row, col, value):
   return cell
 
 
+def entry_values(e, booklet, date):
+  """Values of one entry in COLUMNS order, with booklet and date filled in and OCR scores rounded."""
+  values = []
+  for _, key in COLUMNS:
+    value = e.get(key)
+    if key == "booklet":
+      value = booklet
+    if key == "date":
+      value = date
+    if key in ("ocr_min", "ocr_avg") and value is not None:
+      value = round(value, 1)
+    values.append(value)
+  return values
+
+
+def csv_text(value):
+  """CSV form of a value: empty for None, whole-number floats without a trailing .0."""
+  if value is None:
+    return ""
+  if isinstance(value, float) and value.is_integer():
+    return str(int(value))
+  return str(value)
+
+
+def write_csv(path, header, rows):
+  """Write a header and rows as UTF-8 CSV."""
+  with open(path, "w", encoding="utf-8", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(header)
+    for row in rows:
+      writer.writerow([csv_text(v) for v in row])
+
+
 def write_list_sheet(ws, entries, booklet, date):
   """Write one output list: editable threshold cells in row 1, headers in row 2, data below."""
   ws.sheet_view.rightToLeft = True
@@ -68,14 +109,7 @@ def write_list_sheet(ws, entries, booklet, date):
   for col, (title, _) in enumerate(COLUMNS, start=1):
     set_cell(ws, 2, col, title).font = Font(name=BODY_FONT, bold=True)
   for r, e in enumerate(entries, start=3):
-    for col, (_, key) in enumerate(COLUMNS, start=1):
-      value = e.get(key)
-      if key == "booklet":
-        value = booklet
-      if key == "date":
-        value = date
-      if key in ("ocr_min", "ocr_avg") and value is not None:
-        value = round(value, 1)
+    for col, ((_, key), value) in enumerate(zip(COLUMNS, entry_values(e, booklet, date)), start=1):
       cell = set_cell(ws, r, col, value)
       cell.alignment = Alignment(wrap_text=(key == "body"), vertical="top")
   last = len(entries) + 2
@@ -92,30 +126,35 @@ def write_list_sheet(ws, entries, booklet, date):
 def write_warnings_sheet(ws, warnings):
   """Write the warnings tab for manual review."""
   ws.sheet_view.rightToLeft = True
-  for col, title in enumerate(["עמוד", "טור", "סוג", "טקסט"], start=1):
+  for col, (title, _) in enumerate(WARNING_COLUMNS, start=1):
     set_cell(ws, 1, col, title).font = Font(name=BODY_FONT, bold=True)
   for r, w in enumerate(warnings, start=2):
-    for col, key in enumerate(["page", "column", "type", "text"], start=1):
+    for col, (_, key) in enumerate(WARNING_COLUMNS, start=1):
       set_cell(ws, r, col, w.get(key))
 
 
 def main():
-  """Entry point: write every entry to one sheet in source order, plus the warnings sheet."""
+  """Entry point: write the names and warnings CSVs in source order, and the workbook when asked."""
   args = docopt.docopt(__doc__)
   work = args["--work"]
   entries = read_jsonl(os.path.join(work, "entries_600dpi.jsonl"))
   warnings = read_jsonl(os.path.join(work, "warnings_600dpi.jsonl"))
   entries = [e for e in entries if e.get("category")]
   entries.sort(key=lambda e: e["page"])
-  wb = openpyxl.Workbook()
-  ws = wb.active
-  ws.title = "רשימת שמות"
-  write_list_sheet(ws, entries, args["--booklet"], args["--date"])
-  write_warnings_sheet(wb.create_sheet("אזהרות"), warnings)
-  stamp = time.strftime("%Y%m%d_%H%M%S")
-  out_path = os.path.join(args["--out"], "booklet_%s_%s_%s.xlsx" % (args["--booklet"], args["--tag"], stamp))
-  wb.save(out_path)
-  print("%s: %d entries, %d warnings" % (out_path, len(entries), len(warnings)))
+  base = os.path.join(args["--out"], "booklet_%s" % args["--booklet"])
+  out_paths = [base + "_names.csv", base + "_warnings.csv"]
+  write_csv(out_paths[0], [title for title, _ in COLUMNS], [entry_values(e, args["--booklet"], args["--date"]) for e in entries])
+  write_csv(out_paths[1], [title for title, _ in WARNING_COLUMNS], [[w.get(key) for _, key in WARNING_COLUMNS] for w in warnings])
+  if args["--xlsx"]:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "רשימת שמות"
+    write_list_sheet(ws, entries, args["--booklet"], args["--date"])
+    write_warnings_sheet(wb.create_sheet("אזהרות"), warnings)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out_paths.append(os.path.join(args["--out"], "booklet_%s_%s_%s.xlsx" % (args["--booklet"], args["--tag"], stamp)))
+    wb.save(out_paths[-1])
+  print("%s: %d entries, %d warnings" % (", ".join(out_paths), len(entries), len(warnings)))
 
 
 if __name__ == "__main__":

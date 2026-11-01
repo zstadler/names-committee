@@ -15,7 +15,7 @@
 ```bash
 ./run_batch_600dpi --pdf=samples/booklet_2633.pdf --booklet=2633 --jobs=2 --budget=3000 \
   --stage1=data/stage1_input_clean.xlsx
-./build_v3_output --booklet=2633 --date=1980-06-10 --tag=run --out=.
+./build_v3_output --booklet=2633 --date=1980-06-10 --out=output
 ```
 - **`--stage1` חובה כשמריצים מהריפו**: ברירת-המחדל היא `stage1_input_clean.xlsx` בתיקייה הנוכחית.
 - מבנה ההרצה ונימוקיו (קובץ-לעמוד, המשך-אחרי-הפסקה, מקביליות): [`DECISIONS.md`](DECISIONS.md).

@@ -65,9 +65,8 @@ metadata בטקסט-חופשי (במכוון לא ערכים-קבועים-מרא
 המשך אפשרי: להתאים את `group_words_to_lines` למבנה כזה, או לבנות זיהוי-מבנה מדויק יותר.
 
 ## תוצאות - גיליון 2633
-- הפלט: [`output/booklet_2633_names.csv`](output/booklet_2633_names.csv),
-  [`output/booklet_2633_warnings.csv`](output/booklet_2633_warnings.csv) ו-
-  [`output/booklet_2633_v28.xlsx`](output/booklet_2633_v28.xlsx). הספירות לפי קטגוריה ולפי סוג-אזהרה נגזרות מהם.
+- הפלט: [`output/booklet_2633_names.csv`](output/booklet_2633_names.csv) ו-
+  [`output/booklet_2633_warnings.csv`](output/booklet_2633_warnings.csv). הספירות לפי קטגוריה ולפי סוג-אזהרה נגזרות מהם.
 - **אומת ידנית מול המקור:** ישובים 184, אתרים היסטוריים 27, מועצות אזוריות 12 - תואמים לספירה הידנית
   של המשתמש.
 - **נבדק נקודתית:** נ"צ 1572.9336 (צומת קטורה) שלמה; אפס דליפת footer/colophon לרשומות; עמודים 1-2
