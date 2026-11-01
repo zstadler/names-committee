@@ -27,7 +27,7 @@ NOISE_AREA_THRESHOLD_600DPI = 100
 NOISE_AREA_THRESHOLD_300DPI = 35
 ACTIVE_DPI = DPI_DEFAULT
 TESSERACT_OMP_THREADS = 1
-NIQQUD_RE = re.compile(r"[\N{HEBREW ACCENT ETNAHTA}-\N{HEBREW POINT QAMATS QATAN}]")
+NIQQUD_RE = re.compile(r"[\N{HEBREW ACCENT ETNAHTA}-\N{HEBREW POINT METEG}\N{HEBREW POINT RAFE}-\N{HEBREW POINT QAMATS QATAN}]")
 PREFIX_WORDS = {'מ"א', 'ד"נ', "מ״א", "ד״נ", "מ*א", "ד*נ", "מ'א", "ד'נ"}
 MOVEMENT_RE = re.compile(r"(?:משקי\s+)?תנועת\s+(.+?)(?:,|\s+ב[א-ת]{2,}|\s*\(|\.)")
 COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\N{EN DASH}-]{0,2}\s*(\d{2,6}))?")
@@ -61,8 +61,8 @@ CATEGORY_HEADER_PHRASES = [
 
 
 def strip_niqqud(text):
-  """Remove Hebrew vowel points and cantillation marks from text."""
-  return NIQQUD_RE.sub("", text)
+  """Remove Hebrew vowel points and cantillation marks from text, and turn maqaf into an ASCII hyphen."""
+  return NIQQUD_RE.sub("", text).replace("\N{HEBREW PUNCTUATION MAQAF}", "-")
 
 
 def render_page_png(pdf_path, page, out_dir, dpi=DPI_DEFAULT, crop_fraction=BOTTOM_CROP_FRACTION):
