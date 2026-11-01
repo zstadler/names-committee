@@ -29,6 +29,7 @@ COLUMNS = [
   ("שם רשמי (עברית)", "name"),
   ("תנועה מיישבת", "movement"),
   ('נ"צ', "coords"),
+  ('נ"צ מנורמל', "coords_normalized"),
   ("תיאור/מיקום חופשי", "body"),
   ("מספר גיליון", "booklet"),
   ("תאריך פרסום", "date"),
@@ -84,7 +85,7 @@ def write_list_sheet(ws, entries, booklet, date):
   ws.conditional_formatting.add(rng, FormulaRule(formula=["AND(%s3>=$B$1,%s3<$D$1)" % (score_col, score_col)], fill=PatternFill("solid", fgColor="FFF2CC")))
   ws.conditional_formatting.add(rng, FormulaRule(formula=["%s3>=$D$1" % score_col], fill=PatternFill("solid", fgColor="D9EAD3")))
   ws.column_dimensions["B"].width = 28
-  ws.column_dimensions["E"].width = 80
+  ws.column_dimensions[openpyxl.utils.get_column_letter([k for _, k in COLUMNS].index("body") + 1)].width = 80
   ws.freeze_panes = "A3"
 
 

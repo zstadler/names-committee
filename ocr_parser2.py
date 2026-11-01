@@ -5,7 +5,7 @@ import os
 import re
 import statistics
 from ocr_parser import (cv2, np, render_page_png, denoise_for_ocr, binarize, ocr_tsv, ocr_letter_heights,
-  extract_movement, extract_coords, coords_well_formed, strip_niqqud, word_center, median_or_none,
+  extract_movement, extract_coords, coords_well_formed, normalize_grid_reference, strip_niqqud, word_center, median_or_none,
   CATEGORY_KEYWORDS, CATEGORY_HEADER_PHRASES, PREFIX_WORDS)
 
 HEADER_MIN_H = 60
@@ -508,6 +508,7 @@ def finish_entry(entry):
   lowest = min(entry["words"], key=lambda w: w["conf"]) if entry["words"] else None
   entry["body"] = body
   entry["coords"] = extract_coords(body) or extract_coords(entry["name"])
+  entry["coords_normalized"] = normalize_grid_reference(entry["coords"])
   entry["movement"] = extract_movement(body)
   entry["ocr_min"] = min(confs) if confs else None
   entry["ocr_avg"] = sum(confs) / len(confs) if confs else None

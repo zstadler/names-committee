@@ -30,7 +30,7 @@ TESSERACT_OMP_THREADS = 1
 NIQQUD_RE = re.compile(r"[֑-ׇ]")
 PREFIX_WORDS = {'מ"א', 'ד"נ', "מ״א", "ד״נ", "מ*א", "ד*נ", "מ'א", "ד'נ"}
 MOVEMENT_RE = re.compile(r"(?:משקי\s+)?תנועת\s+(.+?)(?:,|\s+ב[א-ת]{2,}|\s*\(|\.)")
-COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\u2013-]{0,2}\s*(\d{2,6}))?")
+COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:–-]{0,2}\s*(\d{2,6}))?")
 COORDS_OK_RE = re.compile(r"^\d{3}\.\d{3}$|^\d{4}\.\d{4}$")
 CATEGORY_KEYWORDS = [
   ("מועצות אזוריות", ["מועצות אזוריות", "למועצות"]),
@@ -205,6 +205,14 @@ def normalize_coords(first, second):
 def coords_well_formed(coords):
   """True when a coordinate string has the expected nnn.nnn or nnnn.nnnn shape."""
   return bool(coords) and COORDS_OK_RE.match(coords) is not None
+
+
+def normalize_grid_reference(coords):
+  """Pad each half of a well-formed grid reference with trailing zeros to six digits (metres)."""
+  if not coords_well_formed(coords):
+    return None
+  halves = coords.split(".")
+  return "%s/%s" % (halves[0].ljust(6, "0"), halves[1].ljust(6, "0"))
 
 
 def extract_coords(body):
