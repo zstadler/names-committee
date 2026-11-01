@@ -11,7 +11,7 @@
 10,right,unrecognized-text,discarded as noise at y=299: 'ז' (h=52 w=62 conf=29)
 11,right,unrecognized-text,discarded as noise at y=323: 'סי' (h=79 w=66 conf=48)
 14,-,gutter-fallback,slice 0
-14,right,unrecognized-text,line used by no entry at y=419: '5]' (h=40)
+14,right,unrecognized-text,line used by no entry at y=427: '5]' (h=40)
 16,-,gutter-fallback,slice 0
 22,-,gutter-fallback,slice 0
 22,left,large-gap-continuation,-
