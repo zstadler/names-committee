@@ -1,4 +1,4 @@
-scan/
+scan*/
 samples/
 /booklet_*.xlsx
 __pycache__/

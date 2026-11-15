@@ -4,6 +4,7 @@ import difflib
 import os
 import re
 import statistics
+import collections
 from ocr_parser import (cv2, np, render_page_png, denoise_for_ocr, binarize, ocr_tsv, ocr_letter_heights,
   extract_movement, extract_coords, coords_well_formed, normalize_grid_reference, strip_niqqud, word_center, median_or_none,
   CATEGORY_KEYWORDS, CATEGORY_HEADER_PHRASES, PREFIX_WORDS)
@@ -53,11 +54,14 @@ LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
 NUMBER_WORD_RE = re.compile(r"^[(\[]?\d+[)\].,;:!]*$")
 GLUED_NUMBER_RE = re.compile(r"^(\D*[א-ת]\D*?)(\d+[)\].,;:!]*)$")
 TRAILING_PUNCT_RE = re.compile(r"[)\].,;:!]+$")
-DIGIT_RUN_RE = re.compile(r"\d[\d.,:;\N{EN DASH}\N{EM DASH}-]*\d|\d")
+DIGIT_RUN_RE = re.compile(r"\d[\d.,:;/\N{EN DASH}\N{EM DASH}-]*\d|\d")
 DIGITS_LANG = "eng"
 DIGITS_MIN = 3
 DIGITS_SURE_CONF = 80
+DIGITS_DROPPED_FRACTION = 0.7
 BOX_OVERLAP_FRACTION = 0.5
+MARGIN_BIN = 20
+HANGING_CUT_MARGIN = 30
 PENDING_CATEGORY = "__PENDING__"
 STATE_FORCE_NAME = "FORCE_NAME"
 STATE_FORCE_BODY = "FORCE_BODY"
@@ -358,9 +362,14 @@ def apply_latin_digits(words, latin_words):
       continue
     hits = [w for w in words if DIGIT_RUN_RE.search(w["text"]) and boxes_overlap(w, lw)]
     if not hits:
+      if not any(boxes_overlap(w, lw) for w in words):
+        words.append(dict(lw, text=lw["text"][m.start():]))
       continue
-    same_count = sum(len(re.sub(r"\D", "", w["text"])) for w in hits) == len(re.sub(r"\D", "", m.group()))
-    if not same_count and lw["conf"] < DIGITS_SURE_CONF:
+    heb_count = sum(len(re.sub(r"\D", "", w["text"])) for w in hits)
+    latin_count = len(re.sub(r"\D", "", m.group()))
+    within = lw["left"] >= min(w["left"] for w in hits) and lw["left"] + lw["width"] <= max(w["left"] + w["width"] for w in hits)
+    dropped = within and heb_count < DIGITS_DROPPED_FRACTION * latin_count and not any(HEBREW_LETTER_RE.search(w["text"]) for w in hits)
+    if heb_count != latin_count and lw["conf"] < DIGITS_SURE_CONF and not dropped:
       continue
     hits[0]["text"] = DIGIT_RUN_RE.sub(m.group(), hits[0]["text"], count=1)
     for w in hits[1:]:
@@ -718,6 +727,55 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
     "category": category,
     "subcategory": subcategory,
   }
+
+
+def block_margin(words):
+  """Right edge of the description block on a hanging-name page: the most common word right edge (20px bins)."""
+  bins = collections.Counter((w["left"] + w["width"]) // MARGIN_BIN for w in words)
+  best = max(bins, key=lambda b: bins[b - 1] + bins[b] + bins[b + 1])
+  return (best + 1) * MARGIN_BIN
+
+
+def parse_page_hanging(pdf_path, page, work_dir, category, open_entry=None):
+  """Parse one page of the hanging-name layout: names in a strip right of the description block, each description beside and below its name."""
+  png_dir = os.path.join(work_dir, "png")
+  img_path = render_page_png(pdf_path, page, png_dir)
+  words = apply_latin_digits(ocr_tsv(img_path), ocr_tsv(img_path, lang=DIGITS_LANG))
+  if not words:
+    return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [], "headers": [], "open_entry": None, "category": category, "subcategory": None}
+  cut = block_margin(words) + HANGING_CUT_MARGIN
+  lines = group_words_to_lines(words, ocr_letter_heights(img_path))
+  raw_entries = []
+  warnings = []
+  current = open_entry
+  for line in lines:
+    if any(w["left"] < cut < w["left"] + w["width"] for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"])):
+      if current is not None:
+        raw_entries.append(current)
+        current = None
+      continue
+    right = [w for w in line["words"] if w["left"] >= cut]
+    left = [w for w in line["words"] if w["left"] < cut]
+    name = line_text(right)
+    body = {"words": left, "text": line_text(left), "top": line["top"], "bottom": line["bottom"]}
+    if right and len(HEBREW_LETTER_RE.findall(name)) >= 2 and not re.search(r"\d", name):
+      if current is not None:
+        raw_entries.append(current)
+      current = new_entry(name, page, category, "right", {"words": right, "top": line["top"], "bottom": line["bottom"], "median_h": line["median_h"]})
+      if left:
+        append_body(current, body, body["text"])
+    elif left and current is not None:
+      append_body(current, body, body["text"])
+    elif left or right:
+      warnings.append({"page": page, "column": "-", "type": "unrecognized-text", "text": "line used by no entry at y=%d: %r" % (line["top"], line["text"][:60])})
+  leading = None
+  if raw_entries and raw_entries[0]["name"] is None:
+    leading = raw_entries.pop(0)
+  elif current is not None and current["name"] is None:
+    leading = current
+    current = None
+  return {"page": page, "entries": [finish_entry(e) for e in raw_entries], "leading_fragment": leading, "warnings": warnings,
+    "headers": [], "open_entry": current, "category": category, "subcategory": None}
 
 
 def collect_line_heights(pdf_path, page, work_dir):
