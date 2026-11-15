@@ -30,7 +30,7 @@ TESSERACT_OMP_THREADS = 1
 NIQQUD_RE = re.compile(r"[\N{HEBREW ACCENT ETNAHTA}-\N{HEBREW POINT METEG}\N{HEBREW POINT RAFE}-\N{HEBREW POINT QAMATS QATAN}]")
 PREFIX_WORDS = {'מ"א', 'ד"נ', "מ״א", "ד״נ", "מ*א", "ד*נ", "מ'א", "ד'נ"}
 MOVEMENT_RE = re.compile(r"(?:משקי\s+)?תנועת\s+(.+?)(?:,|\s+ב[א-ת]{2,}|\s*\(|\.)")
-COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\N{EN DASH}-]{0,2}\s*(\d{2,6}))?")
+COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?\s?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\N{EN DASH}-]{0,2}\s*(\d{2,6}))?")
 COORDS_OK_RE = re.compile(r"^\d{3}\.\d{3}$|^\d{4}\.\d{4}$")
 CATEGORY_KEYWORDS = [
   ("מועצות אזוריות", ["מועצות אזוריות", "למועצות"]),
@@ -220,6 +220,9 @@ def extract_coords(body):
   m = COORDS_RE.search(body)
   if not m:
     return None
+  if m.group(2) and not body[m.end(1):m.start(2)].strip():
+    # The OCR lost the dot and emitted the halves as two right-to-left ordered tokens.
+    return normalize_coords(m.group(2), m.group(1))
   return normalize_coords(m.group(1), m.group(2))
 
 
