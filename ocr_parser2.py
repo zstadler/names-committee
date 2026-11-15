@@ -36,20 +36,25 @@ AUDIT_MIN_H = 40
 AUDIT_MIN_W = 40
 CALIB_RANGE = (8, 70)
 IN_COLUMN_HEADER_OVERLAP = 0.5
-SUBHEADER_MAP_RE = re.compile(r"מ[פש]\S{0,3}\s+\S{0,4}\s+\S{0,3}\d|\d:\d{2,3},?\d{3}|\d[.+]\d{2,3},\d{3}")
+SUBHEADER_MAP_RE = re.compile(r"מ[פש]\S{0,3}\s+\S{0,4}\s+\S{0,3}\d|\d:\d{2,3},?\d{3}|\d[.+,]\d{2,3},\d{3}")
 FOOTNOTES_RE = re.compile(r"^\W*ביאורים")
 SIGNATURE_DATE_RE = re.compile(r"^\S{1,4}\s+ב\S+\s+התש\S*\s*\(\d{1,2}\s+ב\S+\s+\d{4}\)")
 SUBHEADER_REGION_RE = re.compile(r"^[א-ת][^\sא-ת]*\s+(?:[^\sא-ת]+\s+)?(?P<title>ב[א-ת]+(?:\s+\S+)?)$")
 SUBHEADER_TITLE_RE = re.compile(r"^\S{0,2}\s*(?:[^\sא-ת]+\s+)?\S?(?P<title>שמות ל.*)$")
 COORD_MARKER = r"(?:[נגב][\"*׳״'”“]?\s?צ|\S{0,2}[\"*׳״'”“]\S{0,2})"
-SELF_CONTAINED_RE = re.compile(r"^(?P<name>.+?)\s+(?P<rest>" + COORD_MARKER + r"\S*\s*[.,:]?\s*\d{2,4}(?:[.,;\N{EN DASH}-]{1,2}\s?|\s)\d{2,4}.*)$")
-COORDS_FIRST_RE = re.compile(r"^(?P<rest>\S{0,2}[\"*׳״'”“]?צ\S*\s*[.,:]?\s*[\d.,;\N{EN DASH}-]*\d[\d.,;\N{EN DASH}-]*)\s+(?P<name>.+)$")
+SELF_CONTAINED_RE = re.compile(r"^(?P<name>.+?)\s+(?P<rest>" + COORD_MARKER + r"\S*\s*[.,:]?\s*\d{2,4}(?:[.,;\N{EN DASH}\N{EM DASH}-]{1,2}\s?|\s)?\d{2,4}.*)$")
+COORDS_FIRST_RE = re.compile(r"^(?P<rest>\S{0,2}[\"*׳״'”“]?צ\S*\s*[.,:]?\s*[\d.,;\N{EN DASH}\N{EM DASH}-]*\d[\d.,;\N{EN DASH}\N{EM DASH}-]*)\s+(?P<name>.+)$")
 CATEGORY_PREFIX_ONLY = {"שמורת"}
 MERGE_OVERLAP_FRACTION = 0.5
 FRAGMENT_H_FACTOR = 0.6
 HEBREW_LETTER_RE = re.compile(r"[א-ת]")
 DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?\s?צ\s*[.,:]?\s*\d")
 LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
+DIGIT_RUN_RE = re.compile(r"\d[\d.,:;\N{EN DASH}\N{EM DASH}-]*\d|\d")
+DIGITS_LANG = "eng"
+DIGITS_MIN = 3
+DIGITS_SURE_CONF = 80
+BOX_OVERLAP_FRACTION = 0.5
 PENDING_CATEGORY = "__PENDING__"
 STATE_FORCE_NAME = "FORCE_NAME"
 STATE_FORCE_BODY = "FORCE_BODY"
@@ -303,10 +308,35 @@ def crop_image(img_path, out_path, y0, y1, x0, x1):
   return out_path
 
 
+def boxes_overlap(a, b):
+  """True when two word boxes overlap vertically and by at least half the narrower width horizontally."""
+  dx = min(a["left"] + a["width"], b["left"] + b["width"]) - max(a["left"], b["left"])
+  dy = min(a["top"] + a["height"], b["top"] + b["height"]) - max(a["top"], b["top"])
+  return dy > 0 and dx >= BOX_OVERLAP_FRACTION * min(a["width"], b["width"])
+
+
+def apply_latin_digits(words, latin_words):
+  """Replace the digit runs of Hebrew-model words with the Latin model's reading of the same box (the Hebrew model misreads digits)."""
+  for lw in latin_words:
+    m = DIGIT_RUN_RE.search(lw["text"])
+    if not m or len(re.sub(r"\D", "", m.group())) < DIGITS_MIN:
+      continue
+    hits = [w for w in words if DIGIT_RUN_RE.search(w["text"]) and boxes_overlap(w, lw)]
+    if not hits:
+      continue
+    same_count = sum(len(re.sub(r"\D", "", w["text"])) for w in hits) == len(re.sub(r"\D", "", m.group()))
+    if not same_count and lw["conf"] < DIGITS_SURE_CONF:
+      continue
+    hits[0]["text"] = DIGIT_RUN_RE.sub(m.group(), hits[0]["text"], count=1)
+    for w in hits[1:]:
+      w["text"] = DIGIT_RUN_RE.sub("", w["text"]).strip()
+  return [w for w in words if w["text"]]
+
+
 def ocr_column(img_path, out_path, y0, y1, x0, x1):
   """OCR one column crop; returns its lines and the words the noise filter discarded, in page coordinates."""
   crop_image(img_path, out_path, y0, y1, x0, x1)
-  words = ocr_tsv(out_path)
+  words = apply_latin_digits(ocr_tsv(out_path), ocr_tsv(out_path, lang=DIGITS_LANG))
   chars = ocr_letter_heights(out_path)
   kept = filter_isolated_noise_words(words, x1 - x0)
   kept_ids = set(id(w) for w in kept)
