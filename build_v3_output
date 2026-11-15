@@ -28,6 +28,7 @@ RED_YELLOW_DEFAULT = 60
 YELLOW_GREEN_DEFAULT = 80
 COLUMNS = [
   ("קטגוריה", "category"),
+  ("תת-קטגוריה", "subcategory"),
   ("שם רשמי (עברית)", "name"),
   ("תנועה מיישבת", "movement"),
   ('נ"צ', "coords"),

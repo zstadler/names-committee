@@ -1,10 +1,7 @@
 עמוד,טור,סוג,טקסט
 1,right,unrecognized-text,discarded as noise at y=1789: '33' (h=76 w=128 conf=76)
 2,-,gutter-fallback,slice 0
-2,right,large-gap-continuation,ה --
-2,right,large-gap-continuation,"ג י""ם, תשי""א, עמ' 858."
 2,left,large-gap-continuation,ב;
-2,left,large-gap-continuation,"! עד שמונה ספרות, שמהן שלוש או ארבע משמאל מציינות קו"
 3,-,gutter-fallback,slice 0
 6,right,unrecognized-text,discarded as noise at y=243: 'וו' (h=71 w=98 conf=27)
 9,right,unrecognized-text,discarded as noise at y=290: '-.' (h=53 w=110 conf=63)

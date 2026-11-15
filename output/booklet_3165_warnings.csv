@@ -1,0 +1,42 @@
+עמוד,טור,סוג,טקסט
+1,right,unrecognized-text,discarded as noise at y=1840: '5' (h=72 w=82 conf=95)
+2,-,gutter-fallback,slice 0
+20,-,landscape-page-skipped,7084x2377
+2,right,name-gap-suspicious,730px between 'אביאל' and 'אבינעם' (typical 312)
+2,left,name-gap-suspicious,624px between 'אבירים' and 'אבשלום' (typical 312)
+3,right,name-gap-suspicious,612px between 'אמתי' and 'אספר' (typical 312)
+3,left,name-gap-suspicious,610px between 'בני עצמון' and 'ברוכים' (typical 312)
+5,right,name-gap-suspicious,609px between 'חמש (חומש)' and 'חנָנית' (typical 312)
+6,right,name-gap-suspicious,607px between 'כרכם' and 'כרמל' (typical 312)
+6,left,name-gap-suspicious,617px between 'מירב' and 'מיב!ו־' (typical 312)
+7,left,name-gap-suspicious,725px between 'נוה מִיכָאל' and 'נופים' (typical 312)
+7,left,name-gap-suspicious,608px between 'נחושה' and 'נחליאל' (typical 312)
+7,left,name-gap-suspicious,612px between 'נילייי' and 'ניסֶנית' (typical 312)
+9,right,name-gap-suspicious,686px between 'צורית' and 'צופין' (typical 312)
+10,right,name-gap-suspicious,611px between 'טדמות מחוּלֶה' and 'שומריה' (typical 312)
+10,right,name-gap-suspicious,606px between 'שטים' and 'שילה' (typical 312)
+13,right,name-gap-suspicious,684px between 'שמורת נחל רַבָה' and 'שמורת אלוני תל-תפוח' (typical 312)
+3,left,coords-format,בני עצמון: 078.0820
+4,left,coords-format,ורד יריחו: 190.1375
+5,left,coords-format,כפר אדמים: 18205.13704
+6,right,coords-format,כרמל: 167.0935
+6,right,coords-format,מחנה גבעון: 16635.1401
+9,left,coords-format,שדי אבךוֹ:ם: 0869.06925
+11,right,coords-format,חרבת חברא: 12855.13880
+11,left,coords-format,שמורת נחל חֶצור: 1985.271
+11,left,coords-format,שמורת נחל משמש: 75.275
+12,left,coords-format,שמורת איי חוף-אכזיב: 1575.273
+13,right,coords-format,שמורת נחל בזק עלי: 187.1967
+13,right,coords-format,"שמורת הר""גדיר: 188.1918"
+14,left,coords-format,שמורת אירוס יִרחֶם: 147.0482
+14,left,coords-format,מפל גִמַלֶא: 22027.25794
+14,left,coords-format,עין-יפּעִם: 17250.26315
+15,right,coords-format,"עין""סמוכָה: 19045.26245"
+15,right,coords-format,עיןיחסד: 18620.26530
+15,right,coords-format,עיןדלביאה: 18695.26090
+16,left,coords-format,עין אָמִיר: 1684.13277
+18,left,coords-format,חַרבת פורֶן: 2203.284
+18,left,coords-format,חַרבַת צרמֶן: 229.2782
+19,right,coords-format,חֶרבַת חשניה: 226.2675
+19,right,coords-format,חְרבַת כָנֶף: 2143.253
+19,left,coords-format,חֶרבַת שבעָא: 2128.296

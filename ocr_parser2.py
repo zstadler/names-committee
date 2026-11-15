@@ -35,15 +35,20 @@ NAME_GAP_FACTOR = 1.9
 AUDIT_MIN_H = 40
 AUDIT_MIN_W = 40
 CALIB_RANGE = (8, 70)
-SUBHEADER_MAP_RE = re.compile(r"מ[פש]\S{0,3}\s+\S{0,4}\s+\S{0,3}\d|\d:\d{2,3},?\d{3}")
-COORD_MARKER = r"(?:[נגב][\"*׳״'”“]?צ|\S{0,2}[\"*׳״'”“]\S{0,2})"
-SELF_CONTAINED_RE = re.compile(r"^(?P<name>.+?)\s+(?P<rest>" + COORD_MARKER + r"\S*\s*[.,:]?\s*\d{2,4}[.,;\N{EN DASH}-]{1,2}\s?\d{2,4}.*)$")
+IN_COLUMN_HEADER_OVERLAP = 0.5
+SUBHEADER_MAP_RE = re.compile(r"מ[פש]\S{0,3}\s+\S{0,4}\s+\S{0,3}\d|\d:\d{2,3},?\d{3}|\d[.+]\d{2,3},\d{3}")
+FOOTNOTES_RE = re.compile(r"^\W*ביאורים")
+SIGNATURE_DATE_RE = re.compile(r"^\S{1,4}\s+ב\S+\s+התש\S*\s*\(\d{1,2}\s+ב\S+\s+\d{4}\)")
+SUBHEADER_REGION_RE = re.compile(r"^[א-ת][^\sא-ת]*\s+(?:[^\sא-ת]+\s+)?(?P<title>ב[א-ת]+(?:\s+\S+)?)$")
+SUBHEADER_TITLE_RE = re.compile(r"^\S{0,2}\s*(?:[^\sא-ת]+\s+)?\S?(?P<title>שמות ל.*)$")
+COORD_MARKER = r"(?:[נגב][\"*׳״'”“]?\s?צ|\S{0,2}[\"*׳״'”“]\S{0,2})"
+SELF_CONTAINED_RE = re.compile(r"^(?P<name>.+?)\s+(?P<rest>" + COORD_MARKER + r"\S*\s*[.,:]?\s*\d{2,4}(?:[.,;\N{EN DASH}-]{1,2}\s?|\s)\d{2,4}.*)$")
 COORDS_FIRST_RE = re.compile(r"^(?P<rest>\S{0,2}[\"*׳״'”“]?צ\S*\s*[.,:]?\s*[\d.,;\N{EN DASH}-]*\d[\d.,;\N{EN DASH}-]*)\s+(?P<name>.+)$")
 CATEGORY_PREFIX_ONLY = {"שמורת"}
 MERGE_OVERLAP_FRACTION = 0.5
 FRAGMENT_H_FACTOR = 0.6
 HEBREW_LETTER_RE = re.compile(r"[א-ת]")
-DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?צ\s*[.,:]?\s*\d")
+DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?\s?צ\s*[.,:]?\s*\d")
 LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
 PENDING_CATEGORY = "__PENDING__"
 STATE_FORCE_NAME = "FORCE_NAME"
@@ -79,6 +84,23 @@ def fuzzy_detect_header_category(text, min_ratio=FUZZY_MIN_RATIO):
   if best_ratio >= min_ratio:
     return best_category, best_ratio
   return None, best_ratio
+
+
+def section_category(text, section_titles, allow_fuzzy=True):
+  """Category of a header line as (booklet section title, True), (cleaned header text, False) when the title is unlisted, or (None, False)."""
+  clean = normalize_for_match(text)
+  for title in section_titles:
+    if normalize_for_match(title) in clean:
+      return title, True
+  generic = detect_header_category_v2(text)
+  if generic is None and allow_fuzzy:
+    generic = fuzzy_detect_header_category(text)[0]
+  if generic is None:
+    return None, False
+  for title in section_titles:
+    if (detect_header_category_v2(title) or fuzzy_detect_header_category(title)[0]) == generic:
+      return title, True
+  return clean, False
 
 
 def is_prefix_word(text):
@@ -228,21 +250,36 @@ def find_gutter_line_components(img):
   return x0 + weighted / total, coverage / float(h)
 
 
-def detect_headers(lines, page_width):
-  """Section headers on a full page: tall lines whose text names one of the categories."""
+def detect_headers(lines, page_width, section_titles=()):
+  """Section headers on a full page: tall lines whose text names one of the categories, and footnotes lines that open a slice with no category."""
   headers = []
   for line in lines:
+    if FOOTNOTES_RE.match(strip_niqqud(line["text"])):
+      headers.append({"top": line["top"], "bottom": line["bottom"], "category": None, "text": line["text"]})
+      continue
     if line["median_h"] < HEADER_MIN_H:
       continue
-    strict = detect_header_category_v2(line["text"])
-    if strict:
-      headers.append({"top": line["top"], "bottom": line["bottom"], "category": strict, "text": line["text"], "fuzzy": False})
-      continue
-    fuzzy, ratio = fuzzy_detect_header_category(line["text"])
-    if fuzzy:
-      headers.append({"top": line["top"], "bottom": line["bottom"], "category": fuzzy, "text": line["text"], "fuzzy": True, "ratio": ratio})
+    category, listed = section_category(line["text"], section_titles)
+    if category:
+      headers.append({"top": line["top"], "bottom": line["bottom"], "category": category, "listed": listed, "text": line["text"]})
   headers.sort(key=lambda h: h["top"])
   return headers
+
+
+def is_in_column_header(img, header):
+  """True when the printed column separator runs through the header's rows, i.e. the header sits inside one column."""
+  w = img.shape[1]
+  x0 = int(w * GUTTER_BAND[0])
+  x1 = int(w * GUTTER_BAND[1])
+  band = binarize(img[:, x0:x1])
+  count, _, stats, _ = cv2.connectedComponentsWithStats(band, connectivity=8)
+  span = float(header["bottom"] - header["top"])
+  for i in range(1, count):
+    top = stats[i, cv2.CC_STAT_TOP]
+    h = stats[i, cv2.CC_STAT_HEIGHT]
+    if h >= GUTTER_COMPONENT_MIN_H and min(top + h, header["bottom"]) - max(top, header["top"]) >= IN_COLUMN_HEADER_OVERLAP * span:
+      return True
+  return False
 
 
 def build_slices(headers, page_height, carried_category):
@@ -311,6 +348,13 @@ def is_map_line(text):
   return SUBHEADER_MAP_RE.search(strip_niqqud(text)) is not None
 
 
+def subsection_title(text):
+  """Title of a lettered sub-section header (a region or a 'שמות ל...' group), or None."""
+  clean = strip_niqqud(text).strip()
+  m = SUBHEADER_REGION_RE.match(clean) or SUBHEADER_TITLE_RE.match(clean)
+  return m.group("title") if m else None
+
+
 def split_self_contained_entry(line, name_threshold):
   """Split a 'name + grid reference + coordinates' single-line entry into (name, body), or None."""
   if line["median_h"] < SELF_CONTAINED_H_FACTOR * name_threshold:
@@ -333,7 +377,7 @@ def split_self_contained_entry(line, name_threshold):
 
 def continuation_placeholder(page, category, column):
   """Open-entry stand-in so a page parsed independently treats its opening lines as a continuation."""
-  return {"name": None, "body_lines": [], "words": [], "page": page, "category": category, "column": column, "top": 0, "bottom": 0, "name_h": 0.0}
+  return {"name": None, "body_lines": [], "words": [], "page": page, "category": category, "subcategory": category, "column": column, "top": 0, "bottom": 0, "name_h": 0.0}
 
 
 def merge_fragment(entry, fragment):
@@ -343,7 +387,7 @@ def merge_fragment(entry, fragment):
   return entry
 
 
-def new_entry(name, page, category, column, line, after_map=False):
+def new_entry(name, page, category, column, line, after_map=False, subcategory=None):
   """Create an entry record opened by a name line."""
   return {
     "after_map": after_map,
@@ -352,6 +396,7 @@ def new_entry(name, page, category, column, line, after_map=False):
     "words": list(line["words"]),
     "page": page,
     "category": category,
+    "subcategory": subcategory,
     "column": column,
     "top": line["top"],
     "bottom": line["bottom"],
@@ -366,8 +411,8 @@ def append_body(entry, line, text=None):
   entry["bottom"] = max(entry.get("bottom", line["bottom"]), line["bottom"])
 
 
-def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, column):
-  """Gap-driven state machine turning column lines into entries; returns (entries, warnings, still_open, names_opened)."""
+def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, column, in_column_headers=True, section_titles=(), subcategory=None):
+  """Gap-driven state machine turning column lines into entries; returns (entries, warnings, still_open, names_opened, category, subcategory)."""
   entries = []
   warnings = []
   names_opened = 0
@@ -386,7 +431,25 @@ def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, colum
     if is_category_prefix_line(line["text"]):
       line["used"] = "prefix"
       continue
-    if is_map_line(line["text"]):
+    if SIGNATURE_DATE_RE.match(strip_niqqud(line["text"])):
+      for rest in lines[i:]:
+        rest["used"] = "signature"
+      break
+    header_category, listed = section_category(line["text"], section_titles, allow_fuzzy=False) if in_column_headers and line["median_h"] >= HEADER_MIN_H else (None, False)
+    if header_category:
+      if current is not None:
+        entries.append(current)
+        current = None
+      category = header_category
+      subcategory = None
+      state = STATE_FORCE_NAME
+      line["used"] = "header"
+      line["header"] = {"top": line["top"], "bottom": line["bottom"], "category": category, "listed": listed, "text": line["text"]}
+      continue
+    sub_title = subsection_title(line["text"]) if gap_before is None or gap_before >= GAP_ENTRY_TRANSITION_MIN or lines[i - 1].get("used") == "header" else None
+    if sub_title:
+      subcategory = sub_title
+    if is_map_line(line["text"]) or sub_title:
       if current is not None:
         entries.append(current)
         current = None
@@ -399,7 +462,7 @@ def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, colum
     if split is not None:
       if current is not None:
         entries.append(current)
-      current = new_entry(split[0], page, category, column, line, after_map)
+      current = new_entry(split[0], page, category, column, line, after_map, subcategory)
       after_map = False
       names_opened += 1
       line["used"] = "name"
@@ -411,7 +474,7 @@ def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, colum
         continue
       if current is not None:
         entries.append(current)
-      current = new_entry(line["text"], page, category, column, line, after_map)
+      current = new_entry(line["text"], page, category, column, line, after_map, subcategory)
       after_map = False
       names_opened += 1
       line["used"] = "name"
@@ -425,7 +488,7 @@ def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, colum
     if is_name_candidate(line, gap_before, gap_after, name_threshold, next_line):
       if current is not None:
         entries.append(current)
-      current = new_entry(line["text"], page, category, column, line, after_map)
+      current = new_entry(line["text"], page, category, column, line, after_map, subcategory)
       after_map = False
       names_opened += 1
       line["used"] = "name"
@@ -439,7 +502,7 @@ def lines_to_entries_v2(lines, category, name_threshold, open_entry, page, colum
       append_body(current, line)
       line["used"] = "body"
       state = STATE_CHECK
-  return entries, warnings, current, names_opened
+  return entries, warnings, current, names_opened, category, subcategory
 
 
 def opens_description(line):
@@ -526,7 +589,7 @@ def page_lines_full(img_path):
   return group_words_to_lines(words, chars)
 
 
-def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=None, open_entry=None):
+def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=None, open_entry=None, section_titles=(), carried_subcategory=None):
   """Parse one page; returns dict with entries, warnings, headers, still-open entry and current category."""
   png_dir = os.path.join(work_dir, "png")
   img_path = render_page_png(pdf_path, page, png_dir)
@@ -535,14 +598,15 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
   page_w = img.shape[1]
   if page_w > page_h:
     warning = {"page": page, "column": "-", "type": "landscape-page-skipped", "text": "%dx%d" % (page_w, page_h)}
-    return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [warning], "headers": [], "open_entry": None, "category": carried_category}
+    return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [warning], "headers": [], "open_entry": None, "category": carried_category, "subcategory": carried_subcategory}
   full_lines = page_lines_full(img_path)
-  headers = detect_headers(full_lines, page_w)
+  headers = [h for h in detect_headers(full_lines, page_w, section_titles) if not is_in_column_header(img, h)]
   slices = build_slices(headers, page_h, carried_category)
   raw_entries = []
   warnings = []
   current = open_entry
   category = carried_category
+  subcategory = carried_subcategory
   for si, s in enumerate(slices):
     if si > 0 and current is not None:
       raw_entries.append(current)
@@ -550,8 +614,11 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
     if s["category"] is None:
       continue
     category = s["category"]
+    if si > 0:
+      subcategory = None
     slice_img = img[s["top"]:s["bottom"], :]
     gutter_x, coverage = find_gutter_line_components(slice_img)
+    separator_found = gutter_x is not None
     if gutter_x is None:
       gutter_x = page_w / 2.0
       warnings.append({"page": page, "column": "-", "type": "gutter-fallback", "text": "slice %d" % si})
@@ -560,7 +627,8 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
     for col_name, x0, x1 in columns:
       crop_path = os.path.join(png_dir, "page_%03d_s%d_%s.png" % (page, si, col_name))
       lines, discarded = ocr_column(img_path, crop_path, s["top"], s["bottom"], x0, x1)
-      col_entries, col_warnings, current, names_opened = lines_to_entries_v2(lines, category, name_threshold, current, page, col_name)
+      col_entries, col_warnings, current, names_opened, category, subcategory = lines_to_entries_v2(lines, category, name_threshold, current, page, col_name, separator_found, section_titles, subcategory)
+      headers.extend(l["header"] for l in lines if l.get("used") == "header")
       raw_entries.extend(col_entries)
       warnings.extend(col_warnings)
       openers = sum(1 for l in lines if opens_description(l))
@@ -568,6 +636,7 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
         warnings.append({"page": page, "column": col_name, "type": "possible-skipped-name",
           "text": "%d description openers but %d names in category %s" % (openers, names_opened, category)})
       warnings.extend(check_unrecognized_text(lines, discarded, page, col_name))
+  warnings.extend({"page": page, "column": "-", "type": "unlisted-header", "text": h["text"]} for h in headers if h["category"] and not h["listed"])
   leading = None
   if raw_entries and raw_entries[0]["name"] is None:
     leading = raw_entries.pop(0)
@@ -582,6 +651,7 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
     "headers": headers,
     "open_entry": current,
     "category": category,
+    "subcategory": subcategory,
   }
 
 
