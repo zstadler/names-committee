@@ -54,6 +54,7 @@ pins `OMP_THREAD_LIMIT=1` per worker and parallelises across pages instead.
 | `run_batch_600dpi` | per-page parallel runner and the page-stitching pass |
 | `build_v3_output` | output builder: names and warnings CSVs, optional Excel workbook |
 | `PROJECT_NOTES.md` | entry point to the project notes, in Hebrew: goal, scope, input, results |
+| `CLAUDE.md`, `.claude/settings.json` | GitHub workflow instructions and commit attribution for AI agents |
 | `docs/` | design decisions, open issues, rejected approaches, environment setup and traps, in Hebrew |
 | `data/stage1_input_clean.xlsx` | the 42 relevant issues, with PDF URLs, per-issue calibration and section titles - the parser reads this and writes calibrated thresholds back into it |
 | `data/stage1_input_clean.csv` | text export of the above, for diffing and quick viewing |
