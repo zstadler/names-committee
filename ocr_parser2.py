@@ -50,6 +50,9 @@ FRAGMENT_H_FACTOR = 0.6
 HEBREW_LETTER_RE = re.compile(r"[א-ת]")
 DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?\s?צ\s*[.,:]?\s*\d")
 LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
+NUMBER_WORD_RE = re.compile(r"^[(\[]?\d+[)\].,;:!]*$")
+GLUED_NUMBER_RE = re.compile(r"^(\D*[א-ת]\D*?)(\d+[)\].,;:!]*)$")
+TRAILING_PUNCT_RE = re.compile(r"[)\].,;:!]+$")
 DIGIT_RUN_RE = re.compile(r"\d[\d.,:;\N{EN DASH}\N{EM DASH}-]*\d|\d")
 DIGITS_LANG = "eng"
 DIGITS_MIN = 3
@@ -151,6 +154,38 @@ def filter_isolated_noise_words(words, col_width):
   return kept
 
 
+def line_text(words):
+  """Join a line's words in reading order, restoring left-to-right order inside runs of adjacent number words (a number whose separator the OCR lost comes out as several words in right-to-left order)."""
+  out = []
+  run = []
+  def flush():
+    """Append the pending number run, reversed, with its closing punctuation moved to the end."""
+    tokens = list(reversed(run))
+    if len(tokens) > 1:
+      m = TRAILING_PUNCT_RE.search(tokens[0])
+      if m:
+        tokens[0] = tokens[0][:m.start()]
+        tokens[-1] += m.group()
+    out.extend(tokens)
+    del run[:]
+  for w in words:
+    text = w["text"]
+    glued = GLUED_NUMBER_RE.match(text)
+    if glued:
+      flush()
+      out.append(glued.group(1))
+      text = glued.group(2)
+    if NUMBER_WORD_RE.match(text):
+      run.append(text)
+      if text.endswith((",", ";")):
+        flush()
+      continue
+    flush()
+    out.append(text)
+  flush()
+  return " ".join(out)
+
+
 def finalize_line(line_words, chars):
   """Build a line record from its words: geometry, RTL text, letter-based median height."""
   ordered = sorted(line_words, key=lambda w: -w["left"])
@@ -166,7 +201,7 @@ def finalize_line(line_words, chars):
     median_h = statistics.median([w["height"] for w in ordered])
   return {
     "words": ordered,
-    "text": " ".join(w["text"] for w in ordered),
+    "text": line_text(ordered),
     "top": top,
     "bottom": bottom,
     "left": min(w["left"] for w in ordered),
@@ -224,7 +259,7 @@ def group_words_to_lines(words, chars):
       prev = merged.pop()
       joined = prev["words"] + line["words"]
       rec = finalize_line(joined, chars)
-      rec["text"] = " ".join(w["text"] for w in joined)
+      rec["text"] = line_text(joined)
       rec["words"] = joined
       merged.append(rec)
     else:

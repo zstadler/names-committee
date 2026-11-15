@@ -223,9 +223,6 @@ def extract_coords(body):
   separator = body[m.end(1):m.start(2)] if m.group(2) else None
   if separator == "":
     return normalize_coords(m.group(1) + m.group(2), None)
-  if separator is not None and not separator.strip():
-    # The OCR lost the dot and emitted the halves as two right-to-left ordered tokens.
-    return normalize_coords(m.group(2), m.group(1))
   return normalize_coords(m.group(1), m.group(2))
 
 
