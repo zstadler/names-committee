@@ -11,7 +11,7 @@ Usage:
 Options:
   --pdf=<path>      Booklet PDF [default: samples/booklet_2633.pdf]
   --booklet=<n>     Booklet number used for the stage1 threshold lookup [default: 2633]
-  --layout=<name>   Page layout: two-column or hanging (names in a strip right of the description block) [default: two-column]
+  --layout=<name>   Page layout: two-column or name-column (a separate name column right of the description block) [default: two-column]
   --budget=<sec>    Stop starting new pages after this many seconds [default: 240]
   --jobs=<n>        Pages to parse in parallel [default: 2]
   --stage1=<xlsx>   Input list workbook holding stored thresholds [default: stage1_input_clean.xlsx]
@@ -118,8 +118,8 @@ def parse_one_page(job):
   """Parse a single page independently and store its result; returns a short progress line."""
   pdf_path, page, threshold, work, section_titles, layout = job
   t0 = time.time()
-  if layout == "hanging":
-    result = p2.parse_page_hanging(pdf_path, page, work, section_titles[0] if section_titles else None,
+  if layout == "name-column":
+    result = p2.parse_page_name_column(pdf_path, page, work, section_titles[0] if section_titles else None,
       open_entry=p2.continuation_placeholder(page, p2.PENDING_CATEGORY, "right"))
   else:
     result = p2.parse_page_v2(pdf_path, page, threshold, work,
@@ -217,7 +217,7 @@ def main():
         print(line)
         sys.stdout.flush()
   done = [p for p in range(1, total + 1) if os.path.exists(page_result_path(work, p))]
-  entries, warnings = reconcile_pages(work, total, first, stop_at_empty=layout == "hanging")
+  entries, warnings = reconcile_pages(work, total, first, stop_at_empty=layout == "name-column")
   write_atomic(os.path.join(work, "entries_600dpi.jsonl"), "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries))
   write_atomic(os.path.join(work, "warnings_600dpi.jsonl"), "".join(json.dumps(w, ensure_ascii=False) + "\n" for w in warnings))
   print("%d/%d pages parsed, %d entries, %d warnings, %.0fs" % (len(done), total, len(entries), len(warnings), time.time() - started))

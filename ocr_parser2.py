@@ -61,7 +61,7 @@ DIGITS_SURE_CONF = 80
 DIGITS_DROPPED_FRACTION = 0.7
 BOX_OVERLAP_FRACTION = 0.5
 MARGIN_BIN = 20
-HANGING_CUT_MARGIN = 30
+NAME_COLUMN_CUT_MARGIN = 30
 PENDING_CATEGORY = "__PENDING__"
 STATE_FORCE_NAME = "FORCE_NAME"
 STATE_FORCE_BODY = "FORCE_BODY"
@@ -730,20 +730,20 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
 
 
 def block_margin(words):
-  """Right edge of the description block on a hanging-name page: the most common word right edge (20px bins)."""
+  """Right edge of the description block on a page with a separate name column: the most common word right edge (20px bins)."""
   bins = collections.Counter((w["left"] + w["width"]) // MARGIN_BIN for w in words)
   best = max(bins, key=lambda b: bins[b - 1] + bins[b] + bins[b + 1])
   return (best + 1) * MARGIN_BIN
 
 
-def parse_page_hanging(pdf_path, page, work_dir, category, open_entry=None):
-  """Parse one page of the hanging-name layout: names in a strip right of the description block, each description beside and below its name."""
+def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
+  """Parse one page of the separate-name-column layout: names in a narrow column right of the description block, each description beside and below its name."""
   png_dir = os.path.join(work_dir, "png")
   img_path = render_page_png(pdf_path, page, png_dir)
   words = apply_latin_digits(ocr_tsv(img_path), ocr_tsv(img_path, lang=DIGITS_LANG))
   if not words:
     return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [], "headers": [], "open_entry": None, "category": category, "subcategory": None}
-  cut = block_margin(words) + HANGING_CUT_MARGIN
+  cut = block_margin(words) + NAME_COLUMN_CUT_MARGIN
   lines = group_words_to_lines(words, ocr_letter_heights(img_path))
   raw_entries = []
   warnings = []

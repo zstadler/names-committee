@@ -34,7 +34,7 @@ mkdir -p samples
   --stage1=data/stage1_input_clean.xlsx
 ./build_v3_output --booklet=2633 --date=1980-06-10 --out=output
 # booklets with a separate name column (names right of the description block, 1956-1969):
-./run_batch_600dpi --pdf=samples/booklet_705.pdf --booklet=705 --layout=hanging --work=scan705 \
+./run_batch_600dpi --pdf=samples/booklet_705.pdf --booklet=705 --layout=name-column --work=scan705 \
   --stage1=data/stage1_input_clean.xlsx
 ./build_v3_output --work=scan705 --booklet=705 --date=1959-10-19 --out=output
 ```
