@@ -2,6 +2,10 @@
 
 Start with [`PROJECT_NOTES.md`](PROJECT_NOTES.md) (Hebrew), the entry point to the project documentation.
 
+## Spec-driven changes
+- The spec (`PROJECT_NOTES.md` and `docs/`) is the primary source of truth. Every code change starts as a spec change: update or clarify the spec first, then change the code to match it.
+- A requirement not yet implemented is marked "טרם מיושם" in the spec and phrased in future tense; once implemented and verified, it is marked "מיושם" and describes the current behaviour.
+
 ## GitHub
 - GitHub is the project's progress record: push each commit as soon as it is made.
 - Work on a temporary branch and merge through a PR with "squash and merge", then delete the branch, unless the user says to commit directly to `main`. Propose the PR title and description to the user for approval before creating the PR.
