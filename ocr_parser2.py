@@ -53,7 +53,7 @@ DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?\s?צ\s*[.,:]?\
 LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
 NUMBER_WORD_RE = re.compile(r"^[(\[]?(?:\d{1,2}/)?\d+(?:[.,:]\d+)*[)\].,;:!]*$")
 SHEET_WORD_RE = re.compile(r"^\d{1,2}/\d")
-SHEET_NUMBER_RE = re.compile(r"(?<![\d/])\d{1,2}/(?=\d{3,4}[.,]\d{3,4})")
+SHEET_NUMBER_RE = re.compile(r"(?<![\d/])\d{1,2}/(?=\d{3,4}[.,]\d{3,4}|\d{6}\b|\d{8}\b)")
 INTERNAL_SEPARATOR_RE = re.compile(r"\d[.,:]\d")
 GLUED_NUMBER_RE = re.compile(r"^(\D*[א-ת]\D*?)(\d+[)\].,;:!]*)$")
 TRAILING_PUNCT_RE = re.compile(r"[)\].,;:!]+$")
@@ -62,6 +62,9 @@ DIGITS_LANG = "eng"
 DIGITS_MIN = 3
 DIGITS_SURE_CONF = 80
 DIGITS_DROPPED_FRACTION = 0.7
+DIGITS_WIDER_FACTOR = 1.5
+COORDS_SHAPE_RE = re.compile(r"^(?:\d{1,2}/)?\d{3,4}[.,]\d{3,4}$")
+NAME_FRAGMENT_GAP_FACTOR = 0.5
 BOX_OVERLAP_FRACTION = 0.5
 MARGIN_BIN = 20
 NAME_COLUMN_CUT_MARGIN = 30
@@ -374,20 +377,27 @@ def apply_latin_digits(words, latin_words):
     m = DIGIT_RUN_RE.search(lw["text"])
     if not m or len(re.sub(r"\D", "", m.group())) < DIGITS_MIN:
       continue
-    hits = [w for w in words if DIGIT_RUN_RE.search(w["text"]) and boxes_overlap(w, lw)]
+    hits = [w for w in words if (DIGIT_RUN_RE.search(w["text"]) or not HEBREW_LETTER_RE.search(w["text"])) and boxes_overlap(w, lw)]
+    covering = [w for w in words if boxes_touch(w, lw)]
+    absorbed = any(HEBREW_LETTER_RE.search(w["text"]) and not any(o is not lw and boxes_overlap(w, o) for o in latin_words) for w in covering if w not in hits)
     if not hits:
-      if not any(boxes_overlap(w, lw) for w in words):
+      lettered_cover = any(HEBREW_LETTER_RE.search(w["text"]) for w in covering)
+      if not covering or (not absorbed and (not lettered_cover or COORDS_SHAPE_RE.match(m.group()))):
         words.append(dict(lw, text=lw["text"][m.start():]))
       continue
     heb_count = sum(len(re.sub(r"\D", "", w["text"])) for w in hits)
     latin_count = len(re.sub(r"\D", "", m.group()))
-    covering = [w for w in words if boxes_touch(w, lw)]
-    absorbed = any(HEBREW_LETTER_RE.search(w["text"]) and not any(o is not lw and boxes_overlap(w, o) for o in latin_words) for w in covering)
     within = not absorbed and lw["left"] >= min(w["left"] for w in covering) and lw["left"] + lw["width"] <= max(w["left"] + w["width"] for w in covering)
-    dropped = within and heb_count < DIGITS_DROPPED_FRACTION * latin_count and not any(HEBREW_LETTER_RE.search(w["text"]) for w in hits)
+    hits_width = max(w["left"] + w["width"] for w in hits) - min(w["left"] for w in hits)
+    wider = lw["width"] >= DIGITS_WIDER_FACTOR * hits_width
+    lettered = any(HEBREW_LETTER_RE.search(w["text"]) for w in hits)
+    dropped = within and heb_count < DIGITS_DROPPED_FRACTION * latin_count and (not lettered or wider)
     if heb_count != latin_count and lw["conf"] < DIGITS_SURE_CONF and not dropped:
       continue
-    hits[0]["text"] = DIGIT_RUN_RE.sub(m.group(), hits[0]["text"], count=1)
+    if DIGIT_RUN_RE.search(hits[0]["text"]) and not (lettered and wider):
+      hits[0]["text"] = DIGIT_RUN_RE.sub(m.group(), hits[0]["text"], count=1)
+    else:
+      hits[0]["text"] = m.group()
     for w in hits[1:]:
       w["text"] = DIGIT_RUN_RE.sub("", w["text"]).strip()
   return [w for w in words if w["text"]]
@@ -764,6 +774,7 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   raw_entries = []
   warnings = []
   current = open_entry
+  name_box = None
   for line in lines:
     if any(w["left"] < cut < w["left"] + w["width"] for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"])):
       if current is not None:
@@ -771,6 +782,8 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
         current = None
       continue
     right = [w for w in line["words"] if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2]
+    if right and name_box and min(w["top"] for w in right) < name_box[1] + NAME_FRAGMENT_GAP_FACTOR * (name_box[1] - name_box[0]) and max(w["top"] + w["height"] for w in right) > name_box[0]:
+      right = []
     left = [w for w in line["words"] if w["left"] < cut]
     name = line_text(right)
     body = {"words": left, "text": line_text(left), "top": line["top"], "bottom": line["bottom"]}
@@ -778,6 +791,7 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
       if current is not None:
         raw_entries.append(current)
       current = new_entry(name, page, category, "right", {"words": right, "top": line["top"], "bottom": line["bottom"], "median_h": line["median_h"]})
+      name_box = (min(w["top"] for w in right), max(w["top"] + w["height"] for w in right))
       if left:
         append_body(current, body, body["text"])
     elif left and current is not None:

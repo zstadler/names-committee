@@ -31,7 +31,7 @@ NIQQUD_RE = re.compile(r"[\N{HEBREW ACCENT ETNAHTA}-\N{HEBREW POINT METEG}\N{HEB
 PREFIX_WORDS = {'מ"א', 'ד"נ', "מ״א", "ד״נ", "מ*א", "ד*נ", "מ'א", "ד'נ"}
 MOVEMENT_RE = re.compile(r"(?:משקי\s+)?תנועת\s+(.+?)(?:,|\s+ב[א-ת]{2,}|\s*\(|\.)")
 COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?\s?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\N{EN DASH}\N{EM DASH}-]{0,2}\s*(\d{2,6}))?")
-BARE_COORDS_RE = re.compile(r"^\W*(\d{3,4})[.,](\d{3,4})\b")
+BARE_COORDS_RE = re.compile(r"^\W*(\d{3,4})[.,]?(\d{3,4})\b")
 COORDS_OK_RE = re.compile(r"^\d{3}\.\d{3}$|^\d{4}\.\d{4}$")
 CATEGORY_KEYWORDS = [
   ("מועצות אזוריות", ["מועצות אזוריות", "למועצות"]),
