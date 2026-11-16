@@ -33,7 +33,7 @@ mkdir -p samples
 ./run_batch_600dpi --pdf=samples/booklet_2633.pdf --booklet=2633 --jobs=2 --budget=3000 \
   --stage1=data/stage1_input_clean.xlsx
 ./build_v3_output --booklet=2633 --date=1980-06-10 --out=output
-# hanging-name booklets (name strip right of the description block, 1956-1969):
+# booklets with a separate name column (names right of the description block, 1956-1969):
 ./run_batch_600dpi --pdf=samples/booklet_705.pdf --booklet=705 --layout=hanging --work=scan705 \
   --stage1=data/stage1_input_clean.xlsx
 ./build_v3_output --work=scan705 --booklet=705 --date=1959-10-19 --out=output
