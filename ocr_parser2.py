@@ -64,7 +64,11 @@ DIGITS_SURE_CONF = 80
 DIGITS_DROPPED_FRACTION = 0.7
 DIGITS_WIDER_FACTOR = 1.5
 COORDS_SHAPE_RE = re.compile(r"^(?:\d{1,2}/)?\d{3,4}[.,]\d{3,4}$")
-NAME_FRAGMENT_GAP_FACTOR = 0.5
+NAME_INK_HEIGHT = (25, 200)
+NAME_INK_MIN_AREA = 150
+NAME_INK_EDGE = 20
+NAME_INK_GAP = 40
+NAME_BLOCK_MIN_SIZE = (70, 35)
 BOX_OVERLAP_FRACTION = 0.5
 MARGIN_BIN = 20
 NAME_COLUMN_CUT_MARGIN = 30
@@ -762,6 +766,20 @@ def block_margin(words):
   return (best + 1) * MARGIN_BIN
 
 
+def name_blocks(img, cut):
+  """Vertical extents (left, top, right, bottom) of the ink blocks right of the cut that are large enough to be names."""
+  band = binarize(img[:, cut:])
+  count, _, stats, _ = cv2.connectedComponentsWithStats(band, 8)
+  comps = sorted((stats[i] for i in range(1, count) if NAME_INK_HEIGHT[0] <= stats[i][3] <= NAME_INK_HEIGHT[1] and stats[i][4] >= NAME_INK_MIN_AREA and stats[i][0] + stats[i][2] < band.shape[1] - NAME_INK_EDGE), key=lambda st: st[1])
+  blocks = []
+  for left, top, width, height, _ in comps:
+    if blocks and top <= blocks[-1][3] + NAME_INK_GAP:
+      blocks[-1] = [min(blocks[-1][0], left), blocks[-1][1], max(blocks[-1][2], left + width), max(blocks[-1][3], top + height)]
+    else:
+      blocks.append([left, top, left + width, top + height])
+  return [(cut + b[0], int(b[1]), cut + b[2], int(b[3])) for b in blocks if b[2] - b[0] >= NAME_BLOCK_MIN_SIZE[0] and (b[3] - b[1] >= NAME_BLOCK_MIN_SIZE[1] or b[3] >= band.shape[0] - NAME_INK_EDGE)]
+
+
 def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   """Parse one page of the separate-name-column layout: names in a narrow column right of the description block, each description beside and below its name."""
   png_dir = os.path.join(work_dir, "png")
@@ -772,37 +790,50 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   cut = block_margin(words) + NAME_COLUMN_CUT_MARGIN
   img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
   strip_path = crop_image(img_path, os.path.join(png_dir, "page_%03d_names.png" % page), 0, img.shape[0], cut, img.shape[1])
-  for sw in ocr_tsv(strip_path):
+  strip_words = ocr_tsv(strip_path)
+  for sw in strip_words:
     sw["left"] += cut
-    if len(HEBREW_LETTER_RE.findall(sw["text"])) >= 2 and not any(w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2 and min(w["top"] + w["height"], sw["top"] + sw["height"]) > max(w["top"], sw["top"]) for w in words):
-      words.append(sw)
   lines = group_words_to_lines(words, ocr_letter_heights(img_path))
+  full_width = [line for line in lines if any(w["left"] < cut < w["left"] + w["width"] and re.search(r"[\dא-ת]", w["text"]) for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"]))]
+  blocks = [b for b in name_blocks(img, cut) if not any(b[1] < line["bottom"] and line["top"] < b[3] for line in full_width)]
   raw_entries = []
   warnings = []
   current = open_entry
-  name_box = None
-  for line in lines:
-    if any(w["left"] < cut < w["left"] + w["width"] and re.search(r"[\dא-ת]", w["text"]) for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"])):
+  pending = list(blocks)
+  for line in lines + [None]:
+    while pending and (line is None or pending[0][1] < (line["top"] + line["bottom"]) / 2):
+      b = pending.pop(0)
+      name_words = []
+      for source in (words, strip_words):
+        name_words = [w for w in source if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2 and b[1] < w["top"] + w["height"] and w["top"] < b[3]]
+        if name_words:
+          tallest = max(name_words, key=lambda w: w["height"])
+          name_words = [w for w in name_words if w["top"] < tallest["top"] + tallest["height"] / 2]
+        if len(HEBREW_LETTER_RE.findall(line_text(name_words))) >= 2 and not re.search(r"\d", line_text(name_words)):
+          break
+      name = line_text(name_words)
+      if len(HEBREW_LETTER_RE.findall(name)) < 2 or re.search(r"\d", name):
+        warnings.append({"page": page, "column": "-", "type": "unread-name-block", "text": "name block at y=%d read as %r" % (b[1], name)})
+        continue
+      if b[3] >= img.shape[0] - NAME_INK_EDGE:
+        warnings.append({"page": page, "column": "-", "type": "name-cut-by-scan-edge", "text": "name block at y=%d read as %r" % (b[1], name)})
+      if current is not None:
+        raw_entries.append(current)
+      current = new_entry(name, page, category, "right", {"words": name_words, "top": b[1], "bottom": b[3], "median_h": statistics.median(w["height"] for w in name_words)})
+    if line is None:
+      break
+    if line in full_width:
       if current is not None:
         raw_entries.append(current)
         current = None
       continue
-    right = [w for w in line["words"] if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2]
-    if right and name_box and min(w["top"] for w in right) < name_box[1] + NAME_FRAGMENT_GAP_FACTOR * (name_box[1] - name_box[0]) and max(w["top"] + w["height"] for w in right) > name_box[0]:
-      right = []
     left = [w for w in line["words"] if w["left"] < cut]
-    name = line_text(right)
+    if not left:
+      continue
     body = {"words": left, "text": line_text(left), "top": line["top"], "bottom": line["bottom"]}
-    if right and len(HEBREW_LETTER_RE.findall(name)) >= 2 and not re.search(r"\d", name):
-      if current is not None:
-        raw_entries.append(current)
-      current = new_entry(name, page, category, "right", {"words": right, "top": line["top"], "bottom": line["bottom"], "median_h": line["median_h"]})
-      name_box = (min(w["top"] for w in right), max(w["top"] + w["height"] for w in right))
-      if left:
-        append_body(current, body, body["text"])
-    elif left and current is not None:
+    if current is not None:
       append_body(current, body, body["text"])
-    elif left or right:
+    else:
       warnings.append({"page": page, "column": "-", "type": "unrecognized-text", "text": "line used by no entry at y=%d: %r" % (line["top"], line["text"][:60])})
   leading = None
   if raw_entries and raw_entries[0]["name"] is None:
