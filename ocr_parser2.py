@@ -770,13 +770,19 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   if not words:
     return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [], "headers": [], "open_entry": None, "category": category, "subcategory": None}
   cut = block_margin(words) + NAME_COLUMN_CUT_MARGIN
+  img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+  strip_path = crop_image(img_path, os.path.join(png_dir, "page_%03d_names.png" % page), 0, img.shape[0], cut, img.shape[1])
+  for sw in ocr_tsv(strip_path):
+    sw["left"] += cut
+    if len(HEBREW_LETTER_RE.findall(sw["text"])) >= 2 and not any(w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2 and min(w["top"] + w["height"], sw["top"] + sw["height"]) > max(w["top"], sw["top"]) for w in words):
+      words.append(sw)
   lines = group_words_to_lines(words, ocr_letter_heights(img_path))
   raw_entries = []
   warnings = []
   current = open_entry
   name_box = None
   for line in lines:
-    if any(w["left"] < cut < w["left"] + w["width"] for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"])):
+    if any(w["left"] < cut < w["left"] + w["width"] and re.search(r"[\dא-ת]", w["text"]) for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"])):
       if current is not None:
         raw_entries.append(current)
         current = None
