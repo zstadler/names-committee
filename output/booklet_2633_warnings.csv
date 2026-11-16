@@ -1,6 +1,4 @@
 עמוד,טור,סוג,טקסט
-2,-,gutter-fallback,slice 0
-2,left,large-gap-continuation,ב;
 3,-,gutter-fallback,slice 0
 6,right,unrecognized-text,discarded as noise at y=243: 'וו' (h=71 w=98 conf=27)
 9,right,unrecognized-text,discarded as noise at y=290: '-.' (h=53 w=110 conf=63)
@@ -11,7 +9,6 @@
 16,-,gutter-fallback,slice 0
 22,-,gutter-fallback,slice 0
 22,left,large-gap-continuation,-
-25,-,landscape-page-skipped,7084x2377
 6,left,coords-format,כַלֶנית: 930.2535
 6,left,coords-format,כסִיפָה: 15800.07125
 9,left,coords-format,פלך: 1724.260

@@ -51,7 +51,10 @@ FRAGMENT_H_FACTOR = 0.6
 HEBREW_LETTER_RE = re.compile(r"[א-ת]")
 DESCRIPTION_OPENER_RE = re.compile(r"^\s*\S{0,2}[\"*׳״'”“]?\s?צ\s*[.,:]?\s*\d")
 LEADING_NUMBER_RE = re.compile(r"^[\d\s.\-:;,()|]*")
-NUMBER_WORD_RE = re.compile(r"^[(\[]?\d+[)\].,;:!]*$")
+NUMBER_WORD_RE = re.compile(r"^[(\[]?(?:\d{1,2}/)?\d+(?:[.,:]\d+)*[)\].,;:!]*$")
+SHEET_WORD_RE = re.compile(r"^\d{1,2}/\d")
+SHEET_NUMBER_RE = re.compile(r"(?<![\d/])\d{1,2}/(?=\d{3,4}[.,]\d{3,4})")
+INTERNAL_SEPARATOR_RE = re.compile(r"\d[.,:]\d")
 GLUED_NUMBER_RE = re.compile(r"^(\D*[א-ת]\D*?)(\d+[)\].,;:!]*)$")
 TRAILING_PUNCT_RE = re.compile(r"[)\].,;:!]+$")
 DIGIT_RUN_RE = re.compile(r"\d[\d.,:;/\N{EN DASH}\N{EM DASH}-]*\d|\d")
@@ -159,21 +162,24 @@ def filter_isolated_noise_words(words, col_width):
 
 
 def line_text(words):
-  """Join a line's words in reading order, restoring left-to-right order inside runs of adjacent number words (a number whose separator the OCR lost comes out as several words in right-to-left order)."""
+  """Join a line's words in reading order; a number whose separators the OCR lost comes out as several words in right-to-left order, so each run of adjacent number words is restored to one left-to-right number, and a sheet number before coordinates is removed."""
   out = []
   run = []
   def flush():
-    """Append the pending number run, reversed, with its closing punctuation moved to the end."""
-    tokens = list(reversed(run))
-    if len(tokens) > 1:
+    """Append the pending number run reversed and joined with dots, its closing punctuation moved to the end; a run mixing a single digit with a separated number is noise and stays as is."""
+    noisy = any(INTERNAL_SEPARATOR_RE.search(t) for t in run) and any(len(re.sub(r"\D", "", t)) == 1 for t in run)
+    if len(run) < 2 or noisy:
+      out.extend(run)
+    else:
+      tokens = list(reversed(run))
       m = TRAILING_PUNCT_RE.search(tokens[0])
       if m:
         tokens[0] = tokens[0][:m.start()]
         tokens[-1] += m.group()
-    out.extend(tokens)
+      out.append(".".join(tokens))
     del run[:]
-  for w in words:
-    text = w["text"]
+  texts = [w["text"] for w in words]
+  for i, text in enumerate(texts):
     glued = GLUED_NUMBER_RE.match(text)
     if glued:
       flush()
@@ -181,13 +187,14 @@ def line_text(words):
       text = glued.group(2)
     if NUMBER_WORD_RE.match(text):
       run.append(text)
-      if text.endswith((",", ";")):
+      continues_sheet = i + 1 < len(texts) and SHEET_WORD_RE.match(texts[i + 1])
+      if text.endswith((",", ";")) and not continues_sheet:
         flush()
       continue
     flush()
     out.append(text)
   flush()
-  return " ".join(out)
+  return SHEET_NUMBER_RE.sub("", " ".join(out))
 
 
 def finalize_line(line_words, chars):
@@ -354,6 +361,13 @@ def boxes_overlap(a, b):
   return dy > 0 and dx >= BOX_OVERLAP_FRACTION * min(a["width"], b["width"])
 
 
+def boxes_touch(a, b):
+  """True when two word boxes overlap at all."""
+  dx = min(a["left"] + a["width"], b["left"] + b["width"]) - max(a["left"], b["left"])
+  dy = min(a["top"] + a["height"], b["top"] + b["height"]) - max(a["top"], b["top"])
+  return dx > 0 and dy > 0
+
+
 def apply_latin_digits(words, latin_words):
   """Replace the digit runs of Hebrew-model words with the Latin model's reading of the same box (the Hebrew model misreads digits)."""
   for lw in latin_words:
@@ -367,7 +381,9 @@ def apply_latin_digits(words, latin_words):
       continue
     heb_count = sum(len(re.sub(r"\D", "", w["text"])) for w in hits)
     latin_count = len(re.sub(r"\D", "", m.group()))
-    within = lw["left"] >= min(w["left"] for w in hits) and lw["left"] + lw["width"] <= max(w["left"] + w["width"] for w in hits)
+    covering = [w for w in words if boxes_touch(w, lw)]
+    absorbed = any(HEBREW_LETTER_RE.search(w["text"]) and not any(o is not lw and boxes_overlap(w, o) for o in latin_words) for w in covering)
+    within = not absorbed and lw["left"] >= min(w["left"] for w in covering) and lw["left"] + lw["width"] <= max(w["left"] + w["width"] for w in covering)
     dropped = within and heb_count < DIGITS_DROPPED_FRACTION * latin_count and not any(HEBREW_LETTER_RE.search(w["text"]) for w in hits)
     if heb_count != latin_count and lw["conf"] < DIGITS_SURE_CONF and not dropped:
       continue
@@ -754,7 +770,7 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
         raw_entries.append(current)
         current = None
       continue
-    right = [w for w in line["words"] if w["left"] >= cut]
+    right = [w for w in line["words"] if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2]
     left = [w for w in line["words"] if w["left"] < cut]
     name = line_text(right)
     body = {"words": left, "text": line_text(left), "top": line["top"], "bottom": line["bottom"]}

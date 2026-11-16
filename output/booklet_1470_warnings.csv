@@ -1,29 +1,2 @@
 עמוד,טור,סוג,טקסט
 4,-,unrecognized-text,line used by no entry at y=1230: 'יושב ראש הועדה'
-5,-,unrecognized-text,"line used by no entry at y=4538: '1 ק""ת 1612, תשכ""ד, 0 עמ\' 1671.'"
-6,-,unrecognized-text,line used by no entry at y=456: 'תשי”ה־ 1958 . .'
-6,-,unrecognized-text,"line used by no entry at y=2943: 'ו"" ה צ 5ת'"
-7,-,unrecognized-text,"line used by no entry at y=1172: 'מס"" 1 לשנת 1968 לתכנית מפורטת מס\' 650"", ביחד עם התשריט'"
-7,-,unrecognized-text,"line used by no entry at y=1668: ""גוש 7107 -- חלקוֹ'ת 7124, 125/ 105; 7143; 1408,/ 147, 150,י"""
-7,-,unrecognized-text,"line used by no entry at y=1750: '7172, 155, 154/ 188, 149,/ 156, 68, 101.'"
-7,-,unrecognized-text,"line used by no entry at y=3104: 'הופקד שינוי תכנית מפורטת, הנקרא: ""תבנית מס\' 1182, שינוי'"
-8,-,unrecognized-text,"line used by no entry at y=2988: '1 לשנת 1968 לתכנית מפורטת מס* 693""*, ביחד עם התשריט המצורף .'"
-8,-,unrecognized-text,"line used by no entry at y=3284: 'חלקה 634, בגוש 6214.'"
-4,right,name-gap-suspicious,368px between 'כְפַר ררזבנ&!לד' and '\+ משגֶב דב' (typical 133)
-4,right,name-gap-suspicious,314px between '\+ משגֶב דב' and 'נטועָה' (typical 133)
-4,right,name-gap-suspicious,510px between 'נרְיֶּה' and 'צלרמים' (typical 133)
-6,right,name-gap-suspicious,268px between 'חוק הרשויות' המקןמװת (סמלים) '|' and 'סמלים של רשויות מקומיות :' (typical 133)
-6,right,name-gap-suspicious,"332px between ': , ג - י' and 'לר ה ש . ללהר הא' (typical 133)"
-6,right,name-gap-suspicious,444px between 'לר ה ש . ללהר הא' and 'הר הם' (typical 133)
-6,right,name-gap-suspicious,"306px between 'כװ\עװ ""וֹי”' and 'סמל המועצה המקומית סמל המועצה המקומית * גןהלבנה . \ ירוחם '' (typical 133)"
-6,right,name-gap-suspicious,"823px between 'ג סה עש"")' and 'מרחם תכנון:מקומי, מחוז תל""אביב * \' (typical 133)"
-6,right,name-gap-suspicious,449px between 'הודעה בדבר הפקדת תכנית מפורטת \ |' and 'ביחד עם התשריט המצורף אליו.' (typical 133)
-6,right,name-gap-suspicious,"331px between 'בל מעונין בקרקע, בבנין או בכל פרט תכנוני אחר הרואה את' and 'הועדה המקומית האמורו:' (typical 133)"
-7,right,name-gap-suspicious,"350px between 'הודעות בדבר הפקדת' and 'תל""אביב, ובמשרדי הועדה המקומית לתכנון ולבניה/ תל""אביב""יפו,' (typical 133)"
-7,right,name-gap-suspicious,"651px between 'ואלה הם השטחים הכלולים בשינוי התכנית:' and 'כל מעונין בשינוי התכנית רשאי לעיין בו ללא תשלום, בימים |' (typical 133)"
-7,right,name-gap-suspicious,"490px between 'במשרה: הועות-המקומית. האמורה. .' and 'תל-אביב, ובמשרדי הועדה רמקומית לתכנון ולבניהי תל-אביב""יפו,' (typical 133)"
-7,right,name-gap-suspicious,"450px between 'במשרדי וועדה הועדה המקומית המקומית האמורה האמורה.' and 'תל-אביב, ובמשרדי הועדה המקומית לתכנון ולבגיה; תל""אביב""יפו,' (typical 133)"
-8,right,name-gap-suspicious,"308px between 'הודעות בדבר הפקדת שינוי תכנית מפורטת' and 'תל""אביב, ובמשרדי הועדה המקומית לתכנון ולבניה, תל""אביבדיפו;, =\' (typical 133)"
-8,right,name-gap-suspicious,"560px between 'תל""אביב, ובמשרדי הועדה המקומית לתכנון ולבניה, תל""אביבדיפו;, =\' and 'כל מעונין בשינוי התכנית רשאי לעיין בו ללא תשלום, בימים' (typical 133)"
-8,right,name-gap-suspicious,"468px between 'מחוז תל""אביב' and 'תל-אביב, ובמשרדי הועדה המקומית לתכנון ולבניה, תל-אביבהיפו,' (typical 133)"
-8,right,name-gap-suspicious,"299px between 'מחוז תל""אביב' and 'מרחב תכנון מקומי, תל""אביב""יפו -ז י' (typical 133)"
