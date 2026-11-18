@@ -5,7 +5,7 @@ import os
 import re
 import statistics
 import collections
-from ocr_parser import (cv2, np, render_page_png, denoise_for_ocr, binarize, ocr_tsv, ocr_letter_heights,
+from ocr_parser import (cv2, np, render_page_png, page_layout, denoise_for_ocr, binarize, ocr_tsv, ocr_letter_heights,
   extract_movement, extract_coords, coords_well_formed, normalize_grid_reference, strip_niqqud, word_center, median_or_none,
   CATEGORY_KEYWORDS, CATEGORY_HEADER_PHRASES, PREFIX_WORDS)
 
@@ -410,7 +410,7 @@ def apply_latin_digits(words, latin_words):
 def ocr_column(img_path, out_path, y0, y1, x0, x1):
   """OCR one column crop; returns its lines and the words the noise filter discarded, in page coordinates."""
   crop_image(img_path, out_path, y0, y1, x0, x1)
-  words = apply_latin_digits(ocr_tsv(out_path), ocr_tsv(out_path, lang=DIGITS_LANG))
+  words = in_text_box(apply_latin_digits(ocr_tsv(out_path), ocr_tsv(out_path, lang=DIGITS_LANG)), img_path, x0, y0)
   chars = ocr_letter_heights(out_path)
   kept = filter_isolated_noise_words(words, x1 - x0)
   kept_ids = set(id(w) for w in kept)
@@ -688,7 +688,7 @@ def finish_entry(entry):
 
 def page_lines_full(img_path):
   """Full-page lines (used only for header detection)."""
-  words = ocr_tsv(img_path)
+  words = in_text_box(ocr_tsv(img_path), img_path)
   chars = ocr_letter_heights(img_path)
   return group_words_to_lines(words, chars)
 
@@ -707,7 +707,7 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
   headers = [h for h in detect_headers(full_lines, page_w, section_titles) if not is_in_column_header(img, h)]
   slices = build_slices(headers, page_h, carried_category)
   raw_entries = []
-  warnings = []
+  warnings = footer_warnings(img_path, page)
   current = open_entry
   category = carried_category
   subcategory = carried_subcategory
@@ -766,9 +766,29 @@ def block_margin(words):
   return (best + 1) * MARGIN_BIN
 
 
-def name_blocks(img, cut):
-  """Vertical extents (left, top, right, bottom) of the ink blocks right of the cut that are large enough to be names."""
+def in_text_box(words, img_path, dx=0, dy=0):
+  """Words whose center lies inside the page's text box; dx, dy shift crop coordinates to page coordinates."""
+  box = page_layout(img_path)["box"]
+  if box is None:
+    return words
+  return [w for w in words if box[0] <= w["left"] + w["width"] / 2 + dx < box[2] and box[1] <= w["top"] + w["height"] / 2 + dy < box[3]]
+
+
+def footer_warnings(img_path, page):
+  """A `footer-not-found` warning when the page render found no footer."""
+  layout = page_layout(img_path)
+  if layout["footer"] is not None:
+    return []
+  return [{"page": page, "column": "-", "type": "footer-not-found", "text": "text box %s" % layout["box"]}]
+
+
+def name_blocks(img, cut, box=None):
+  """Vertical extents (left, top, right, bottom) of the ink blocks right of the cut and inside the text box that are large enough to be names."""
   band = binarize(img[:, cut:])
+  if box is not None:
+    inside = np.zeros_like(band)
+    inside[box[1]:box[3], max(0, box[0] - cut):max(0, box[2] - cut)] = 255
+    band = cv2.bitwise_and(band, inside)
   count, _, stats, _ = cv2.connectedComponentsWithStats(band, 8)
   comps = sorted((stats[i] for i in range(1, count) if NAME_INK_HEIGHT[0] <= stats[i][3] <= NAME_INK_HEIGHT[1] and stats[i][4] >= NAME_INK_MIN_AREA and stats[i][0] + stats[i][2] < band.shape[1] - NAME_INK_EDGE), key=lambda st: st[1])
   blocks = []
@@ -777,27 +797,27 @@ def name_blocks(img, cut):
       blocks[-1] = [min(blocks[-1][0], left), blocks[-1][1], max(blocks[-1][2], left + width), max(blocks[-1][3], top + height)]
     else:
       blocks.append([left, top, left + width, top + height])
-  return [(cut + b[0], int(b[1]), cut + b[2], int(b[3])) for b in blocks if b[2] - b[0] >= NAME_BLOCK_MIN_SIZE[0] and (b[3] - b[1] >= NAME_BLOCK_MIN_SIZE[1] or b[3] >= band.shape[0] - NAME_INK_EDGE)]
+  return [(cut + b[0], int(b[1]), cut + b[2], int(b[3])) for b in blocks if b[2] - b[0] >= NAME_BLOCK_MIN_SIZE[0] and b[3] - b[1] >= NAME_BLOCK_MIN_SIZE[1]]
 
 
 def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   """Parse one page of the separate-name-column layout: names in a narrow column right of the description block, each description beside and below its name."""
   png_dir = os.path.join(work_dir, "png")
   img_path = render_page_png(pdf_path, page, png_dir)
-  words = apply_latin_digits(ocr_tsv(img_path), ocr_tsv(img_path, lang=DIGITS_LANG))
+  words = in_text_box(apply_latin_digits(ocr_tsv(img_path), ocr_tsv(img_path, lang=DIGITS_LANG)), img_path)
   if not words:
     return {"page": page, "entries": [], "leading_fragment": open_entry, "warnings": [], "headers": [], "open_entry": None, "category": category, "subcategory": None}
   cut = block_margin(words) + NAME_COLUMN_CUT_MARGIN
   img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
   strip_path = crop_image(img_path, os.path.join(png_dir, "page_%03d_names.png" % page), 0, img.shape[0], cut, img.shape[1])
-  strip_words = ocr_tsv(strip_path)
+  strip_words = in_text_box(ocr_tsv(strip_path), img_path, cut)
   for sw in strip_words:
     sw["left"] += cut
   lines = group_words_to_lines(words, ocr_letter_heights(img_path))
   full_width = [line for line in lines if any(w["left"] < cut < w["left"] + w["width"] and re.search(r"[\dא-ת]", w["text"]) for w in line["words"]) or FOOTNOTES_RE.match(strip_niqqud(line["text"]))]
-  blocks = [b for b in name_blocks(img, cut) if not any(b[1] < line["bottom"] and line["top"] < b[3] for line in full_width)]
+  blocks = [b for b in name_blocks(img, cut, page_layout(img_path)["box"]) if not any(b[1] < line["bottom"] and line["top"] < b[3] for line in full_width)]
   raw_entries = []
-  warnings = []
+  warnings = footer_warnings(img_path, page)
   current = open_entry
   pending = list(blocks)
   for line in lines + [None]:
@@ -815,8 +835,6 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
       if len(HEBREW_LETTER_RE.findall(name)) < 2 or re.search(r"\d", name):
         warnings.append({"page": page, "column": "-", "type": "unread-name-block", "text": "name block at y=%d read as %r" % (b[1], name)})
         continue
-      if b[3] >= img.shape[0] - NAME_INK_EDGE:
-        warnings.append({"page": page, "column": "-", "type": "name-cut-by-scan-edge", "text": "name block at y=%d read as %r" % (b[1], name)})
       if current is not None:
         raw_entries.append(current)
       current = new_entry(name, page, category, "right", {"words": name_words, "top": b[1], "bottom": b[3], "median_h": statistics.median(w["height"] for w in name_words)})

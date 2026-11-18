@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Base OCR helpers for the Yalkut HaPirsumim names-committee parser."""
 import csv
+import difflib
 import importlib
+import json
 import os
 import re
 import statistics
@@ -22,7 +24,14 @@ cv2 = ensure_package("cv2", "opencv-python-headless")
 np = ensure_package("numpy")
 
 DPI_DEFAULT = 600
-BOTTOM_CROP_FRACTION = 0.90
+TEXT_BOX_MIN_INK = 20
+TEXT_BOX_RUN = 30
+TEXT_BOX_BLANK = 20
+TEXT_BOX_EDGE_FRACTION = 0.06
+TEXT_BOX_MAX_ROUNDS = 10
+FOOTER_SEARCH_FRACTION = 0.15
+FOOTER_TEXT = "ילקוטהפרסומים"
+FOOTER_MIN_RATIO = 0.5
 NOISE_AREA_THRESHOLD_600DPI = 100
 NOISE_AREA_THRESHOLD_300DPI = 35
 ACTIVE_DPI = DPI_DEFAULT
@@ -66,8 +75,8 @@ def strip_niqqud(text):
   return NIQQUD_RE.sub("", text).replace("\N{HEBREW PUNCTUATION MAQAF}", "-")
 
 
-def render_page_png(pdf_path, page, out_dir, dpi=DPI_DEFAULT, crop_fraction=BOTTOM_CROP_FRACTION):
-  """Render one PDF page to PNG at the given dpi and crop the footer strip from the bottom."""
+def render_page_png(pdf_path, page, out_dir, dpi=DPI_DEFAULT):
+  """Render one PDF page to PNG at the given dpi, find its text box and footer, and whiten the page from the footer down."""
   global ACTIVE_DPI
   ACTIVE_DPI = dpi
   os.makedirs(out_dir, exist_ok=True)
@@ -76,9 +85,93 @@ def render_page_png(pdf_path, page, out_dir, dpi=DPI_DEFAULT, crop_fraction=BOTT
   if not os.path.exists(out_path):
     subprocess.run(["pdftoppm", "-r", str(dpi), "-f", str(page), "-l", str(page), "-png", "-gray", "-singlefile", pdf_path, prefix], check=True)
     img = cv2.imread(out_path, cv2.IMREAD_GRAYSCALE)
-    keep_h = int(img.shape[0] * crop_fraction)
-    cv2.imwrite(out_path, img[:keep_h, :])
+    layout = {"box": None, "footer": None}
+    if img.shape[1] <= img.shape[0]:
+      ink = speckless_ink(img)
+      layout["box"] = text_box(ink)
+      if layout["box"] is not None:
+        layout["footer"] = find_footer(img, ink, layout["box"], prefix + "_footer.png")
+        if layout["footer"] is not None:
+          img[layout["footer"]:] = 255
+    cv2.imwrite(out_path, img)
+    with open(prefix + "_layout.json", "w") as f:
+      json.dump(layout, f)
   return out_path
+
+
+def page_layout(img_path):
+  """Text box and footer top found when the page was rendered."""
+  with open(img_path[:-4] + "_layout.json") as f:
+    return json.load(f)
+
+
+def speckless_ink(img):
+  """Boolean ink mask without the connected components smaller than the denoise threshold."""
+  count, labels, stats, _ = cv2.connectedComponentsWithStats(binarize(img), connectivity=8)
+  keep = stats[:, cv2.CC_STAT_AREA] >= noise_area_threshold_for()
+  keep[0] = False
+  return keep[labels]
+
+
+def text_start(counts):
+  """Index where the text starts in a line profile, after the page-edge zone; None when there is no text."""
+  ink = counts >= TEXT_BOX_MIN_INK
+  n = len(ink)
+  edge = next((i for i in range(int(TEXT_BOX_EDGE_FRACTION * n)) if not ink[i:i + TEXT_BOX_BLANK].any()), 0)
+  start = next((i for i in range(edge, n - TEXT_BOX_RUN) if ink[i:i + TEXT_BOX_RUN].all()), None)
+  if start is None:
+    return None
+  while True:
+    before = [i for i in range(max(edge, start - TEXT_BOX_BLANK), start) if counts[i] > 0]
+    if not before:
+      return start
+    start = before[0]
+
+
+def text_box(ink):
+  """Bounding box (x0, y0, x1, y1) of the page text, without page-edge zones; None when no text is found."""
+  h, w = ink.shape
+  box = (int(TEXT_BOX_EDGE_FRACTION * w), int(TEXT_BOX_EDGE_FRACTION * h), w - int(TEXT_BOX_EDGE_FRACTION * w), h - int(TEXT_BOX_EDGE_FRACTION * h))
+  for _ in range(TEXT_BOX_MAX_ROUNDS):
+    cols = ink[box[1]:box[3]].sum(axis=0)
+    rows = ink[:, box[0]:box[2]].sum(axis=1)
+    sides = [text_start(cols), text_start(cols[::-1]), text_start(rows), text_start(rows[::-1])]
+    if None in sides:
+      return None
+    new_box = (sides[0], sides[2], w - sides[1], h - sides[3])
+    if new_box == box:
+      break
+    box = new_box
+  return list(box)
+
+
+def footer_score(text):
+  """Best difflib ratio between the footer text and an equal-length window of the Hebrew letters read."""
+  letters = re.sub(r"[^א-ת]", "", text)
+  windows = [letters[i:i + len(FOOTER_TEXT)] for i in range(max(1, len(letters) - len(FOOTER_TEXT) + 1))]
+  return max(difflib.SequenceMatcher(None, window, FOOTER_TEXT).ratio() for window in windows)
+
+
+def find_footer(img, ink, box, band_path):
+  """Top row of the lowest text band in the bottom of the page that reads like the footer; None when there is none."""
+  x0, y0, x1, y1 = box
+  rows = ink[:, x0:x1].sum(axis=1) >= TEXT_BOX_MIN_INK
+  bands = []
+  y = y0
+  while y < y1:
+    if rows[y]:
+      top = y
+      while y < y1 and rows[y:min(y1, y + TEXT_BOX_BLANK)].any():
+        y += 1
+      bands.append((top, y))
+    y += 1
+  for top, bottom in reversed(bands):
+    if top < (1 - FOOTER_SEARCH_FRACTION) * img.shape[0]:
+      return None
+    cv2.imwrite(band_path, img[top:bottom, x0:x1])
+    if footer_score(run_tesseract(band_path, ["--psm", "7"])) >= FOOTER_MIN_RATIO:
+      return top
+  return None
 
 
 def noise_area_threshold_for():
