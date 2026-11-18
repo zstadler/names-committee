@@ -7,7 +7,7 @@ Start with [`PROJECT_NOTES.md`](PROJECT_NOTES.md) (Hebrew), the entry point to t
 - A requirement not yet implemented is marked "טרם מיושם" in the spec and phrased in future tense; once implemented and verified, it is marked "מיושם" and describes the current behaviour.
 
 ## Responses
-- Whenever a response mentions a booklet number, make it a link to the booklet's PDF: the URL in the `קישור ישיר לעמוד ההודעה` column of `data/stage1_input_clean.csv`.
+- Whenever a response mentions a booklet number, make it a link to the booklet's PDF: the URL in the `קישור ישיר לעמוד ההודעה` column of `data/stage1_input_clean.csv`. When the reference is to a specific page, append `#page=NN` to the URL and say the page.
 
 ## GitHub
 - GitHub is the project's progress record: push each commit as soon as it is made.
