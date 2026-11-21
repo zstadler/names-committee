@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Main parser for the 1969-1992 two-column Yalkut HaPirsumim format (parse_page_v2)."""
 import difflib
+import html
 import os
 import re
 import statistics
 import collections
+import subprocess
 from ocr_parser import (cv2, np, render_page_png, page_layout, denoise_for_ocr, binarize, ocr_tsv, ocr_letter_heights,
-  extract_movement, extract_coords, coords_well_formed, normalize_grid_reference, strip_niqqud, word_center, median_or_none,
-  CATEGORY_KEYWORDS, CATEGORY_HEADER_PHRASES, PREFIX_WORDS)
+  extract_movement, extract_coords, coords_well_formed, normalize_grid_reference, normalize_coords, strip_niqqud, word_center, median_or_none,
+  run_tesseract, CATEGORY_KEYWORDS, CATEGORY_HEADER_PHRASES, PREFIX_WORDS, DPI_DEFAULT, DEFAULT_COORD_FORMS)
 
 HEADER_MIN_H = 60
 FUZZY_MIN_RATIO = 0.65
@@ -69,6 +71,16 @@ NAME_INK_MIN_AREA = 150
 NAME_INK_EDGE = 20
 NAME_INK_GAP = 40
 NAME_BLOCK_MIN_SIZE = (70, 35)
+NAME_ROW_MIN_INK = 20
+NAME_ROW_OUTSIDE_FRACTION = 0.9
+COORDS_CROP_WIDTH = 650
+COORDS_CROP_MARGINS = (20, 40)
+COORDS_COLUMN_TOP_MARGIN = 25
+COORDS_CROP_ARGS = ["--psm", "6", "-c", "tessedit_char_whitelist=0123456789./,"]
+COORD_TOKEN_RE = re.compile(r"(?<!\d)(\d{2,5})[.,]{1,2}(\d{2,5})(?!\d)|(?<!\d)(\d{6}|\d{8})(?!\d)")
+LEADING_SHEET_RE = re.compile(r"^\D*?\d{1,2}/")
+TEXT_LAYER_WORD_RE = re.compile(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</word>')
+TEXT_LAYER_ROW_BUCKET = 40
 BOX_OVERLAP_FRACTION = 0.5
 MARGIN_BIN = 20
 NAME_COLUMN_CUT_MARGIN = 30
@@ -662,10 +674,82 @@ def check_name_gaps(entries, factor=NAME_GAP_FACTOR):
   return warnings
 
 
-def check_coords_format(entries):
-  """Flag entries whose extracted grid reference is not in the expected nnn.nnn or nnnn.nnnn shape."""
+def check_coords_format(entries, forms=DEFAULT_COORD_FORMS):
+  """Flag entries whose extracted grid reference is not in one of the booklet's coordinate forms."""
   return [{"page": e["page"], "column": e["column"], "type": "coords-format",
-    "text": "%s: %s" % (e["name"], e["coords"])} for e in entries if e["coords"] and not coords_well_formed(e["coords"])]
+    "text": "%s: %s" % (e["name"], e["coords"])} for e in entries if e["coords"] and not coords_well_formed(e["coords"], forms)]
+
+
+def coords_in_text(text, forms):
+  """First grid reference in the booklet's forms within a text, after removing a leading sheet number."""
+  for m in COORD_TOKEN_RE.finditer(LEADING_SHEET_RE.sub("", text)):
+    coords = normalize_coords(m.group(1), m.group(2)) if m.group(1) else normalize_coords(m.group(3), None)
+    if coords_well_formed(coords, forms):
+      return coords
+  return None
+
+
+def text_layer_words(pdf_path, page):
+  """Words of the PDF's own text layer on a page, as boxes in rendered-image pixels."""
+  out = subprocess.run(["pdftotext", "-f", str(page), "-l", str(page), "-bbox", pdf_path, "-"], capture_output=True, text=True).stdout
+  scale = DPI_DEFAULT / 72.0
+  return [{"x0": float(a) * scale, "y0": float(b) * scale, "x1": float(c) * scale, "y1": float(d) * scale, "text": html.unescape(t)}
+    for a, b, c, d, t in TEXT_LAYER_WORD_RE.findall(out)]
+
+
+def coords_region(entry):
+  """Page area (x0, y0, x1, y1) where an entry's coordinate is printed, or None."""
+  if entry.get("coords_region"):
+    return entry["coords_region"]
+  if entry.get("column_x"):
+    return [entry["column_x"][0], entry["top"] - COORDS_COLUMN_TOP_MARGIN, entry["column_x"][1], entry["bottom"]]
+  return None
+
+
+def text_layer_coords(layer_words, region, forms):
+  """First grid reference in the booklet's forms among the text-layer words centered in a region, top to bottom and right to left."""
+  x0, y0, x1, y1 = region
+  inside = [w for w in layer_words if x0 <= (w["x0"] + w["x1"]) / 2 <= x1 and y0 <= (w["y0"] + w["y1"]) / 2 <= y1]
+  for w in sorted(inside, key=lambda w: (round(w["y0"] / TEXT_LAYER_ROW_BUCKET), -w["x1"])):
+    coords = coords_in_text(w["text"], forms)
+    if coords:
+      return coords
+  return None
+
+
+def crop_coords(img_path, region, out_path, forms):
+  """Grid reference read by the `eng` model, digits only, from a crop of the coordinate's area."""
+  img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+  x0, y0, x1, y1 = [int(v) for v in region]
+  cv2.imwrite(out_path, img[max(0, y0):y1, max(0, x0):x1])
+  return coords_in_text(run_tesseract(out_path, COORDS_CROP_ARGS, lang=DIGITS_LANG).replace(" ", ""), forms)
+
+
+def resolve_coords(entries, pdf_path, work_dir, forms=DEFAULT_COORD_FORMS):
+  """Compare each entry's coordinate with the PDF text layer, fill missing ones from it or from a crop, and warn on disagreement."""
+  warnings = []
+  layers = {}
+  for e in entries:
+    region = coords_region(e)
+    if region is None:
+      continue
+    if e["page"] not in layers:
+      layers[e["page"]] = text_layer_words(pdf_path, e["page"])
+    regular = e["coords"] if coords_well_formed(e["coords"], forms) else None
+    layer = text_layer_coords(layers[e["page"]], region, forms)
+    if regular and layer and regular != layer:
+      warnings.append({"page": e["page"], "column": e["column"], "type": "coords-uncertain", "text": "%s: %s (text layer: %s)" % (e["name"], regular, layer)})
+    elif layer and not regular:
+      warnings.append({"page": e["page"], "column": e["column"], "type": "coords-from-text-layer", "text": "%s: %s (regular reading: %s)" % (e["name"], layer, e["coords"])})
+      e["coords"] = layer
+    elif not regular and e.get("coords_region"):
+      img_path = os.path.join(work_dir, "png", "page_%03d_%ddpi.png" % (e["page"], DPI_DEFAULT))
+      crop = crop_coords(img_path, region, os.path.join(work_dir, "png", "page_%03d_coords_%d.png" % (e["page"], region[1])), forms)
+      if crop:
+        warnings.append({"page": e["page"], "column": e["column"], "type": "coords-from-crop", "text": "%s: %s (regular reading: %s)" % (e["name"], crop, e["coords"])})
+        e["coords"] = crop
+    e["coords_normalized"] = normalize_grid_reference(e["coords"], forms)
+  return warnings
 
 
 def finish_entry(entry):
@@ -732,6 +816,9 @@ def parse_page_v2(pdf_path, page, name_threshold, work_dir, carried_category=Non
       crop_path = os.path.join(png_dir, "page_%03d_s%d_%s.png" % (page, si, col_name))
       lines, discarded = ocr_column(img_path, crop_path, s["top"], s["bottom"], x0, x1)
       col_entries, col_warnings, current, names_opened, category, subcategory = lines_to_entries_v2(lines, category, name_threshold, current, page, col_name, separator_found, section_titles, subcategory)
+      for e in col_entries + [current]:
+        if e is not None and "column_x" not in e:
+          e["column_x"] = [x0, x1]
       headers.extend(l["header"] for l in lines if l.get("used") == "header")
       raw_entries.extend(col_entries)
       warnings.extend(col_warnings)
@@ -783,12 +870,14 @@ def footer_warnings(img_path, page):
 
 
 def name_blocks(img, cut, box=None):
-  """Vertical extents (left, top, right, bottom) of the ink blocks right of the cut and inside the text box that are large enough to be names."""
+  """Vertical extents (left, top, right, bottom) of the ink blocks right of the cut and inside the text box that are large enough to be names, ignoring rows with too little ink or outside the page."""
   band = binarize(img[:, cut:])
   if box is not None:
     inside = np.zeros_like(band)
     inside[box[1]:box[3], max(0, box[0] - cut):max(0, box[2] - cut)] = 255
     band = cv2.bitwise_and(band, inside)
+  row_ink = (band > 0).sum(axis=1)
+  band[(row_ink < NAME_ROW_MIN_INK) | (row_ink >= NAME_ROW_OUTSIDE_FRACTION * band.shape[1])] = 0
   count, _, stats, _ = cv2.connectedComponentsWithStats(band, 8)
   comps = sorted((stats[i] for i in range(1, count) if NAME_INK_HEIGHT[0] <= stats[i][3] <= NAME_INK_HEIGHT[1] and stats[i][4] >= NAME_INK_MIN_AREA and stats[i][0] + stats[i][2] < band.shape[1] - NAME_INK_EDGE), key=lambda st: st[1])
   blocks = []
@@ -819,18 +908,22 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
   raw_entries = []
   warnings = footer_warnings(img_path, page)
   current = open_entry
-  pending = list(blocks)
+  named = []
+  for b in blocks:
+    name_words = []
+    for source in (words, strip_words):
+      name_words = [w for w in source if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2 and b[1] < w["top"] + w["height"] and w["top"] < b[3]]
+      if name_words:
+        tallest = max(name_words, key=lambda w: w["height"])
+        name_words = [w for w in name_words if w["top"] < tallest["top"] + tallest["height"] / 2]
+      if len(HEBREW_LETTER_RE.findall(line_text(name_words))) >= 2 and not re.search(r"\d", line_text(name_words)):
+        break
+    anchor = min(w["top"] for w in name_words) if name_words and source is words else b[1]
+    named.append((anchor, b, name_words))
+  pending = sorted(named, key=lambda n: n[0])
   for line in lines + [None]:
-    while pending and (line is None or pending[0][1] < (line["top"] + line["bottom"]) / 2):
-      b = pending.pop(0)
-      name_words = []
-      for source in (words, strip_words):
-        name_words = [w for w in source if w["left"] >= cut and len(HEBREW_LETTER_RE.findall(w["text"])) >= 2 and b[1] < w["top"] + w["height"] and w["top"] < b[3]]
-        if name_words:
-          tallest = max(name_words, key=lambda w: w["height"])
-          name_words = [w for w in name_words if w["top"] < tallest["top"] + tallest["height"] / 2]
-        if len(HEBREW_LETTER_RE.findall(line_text(name_words))) >= 2 and not re.search(r"\d", line_text(name_words)):
-          break
+    while pending and (line is None or pending[0][0] < (line["top"] + line["bottom"]) / 2):
+      _, b, name_words = pending.pop(0)
       name = line_text(name_words)
       if len(HEBREW_LETTER_RE.findall(name)) < 2 or re.search(r"\d", name):
         warnings.append({"page": page, "column": "-", "type": "unread-name-block", "text": "name block at y=%d read as %r" % (b[1], name)})
@@ -838,6 +931,7 @@ def parse_page_name_column(pdf_path, page, work_dir, category, open_entry=None):
       if current is not None:
         raw_entries.append(current)
       current = new_entry(name, page, category, "right", {"words": name_words, "top": b[1], "bottom": b[3], "median_h": statistics.median(w["height"] for w in name_words)})
+      current["coords_region"] = [cut - COORDS_CROP_WIDTH, b[1] - COORDS_CROP_MARGINS[0], cut, b[3] + COORDS_CROP_MARGINS[1]]
     if line is None:
       break
     if line in full_width:

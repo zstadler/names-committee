@@ -41,6 +41,7 @@ START_PAGE_COL_HEADER = "עמוד תחילת ההודעה"
 LIST_START_COL_HEADER = "תחילת רשימת השמות"
 LIST_END_COL_HEADER = "סוף רשימת השמות"
 VERIFIED_COUNT_COL_HEADER = "מספר רשומות מאומת"
+COORD_FORMS_COL_HEADER = 'צורות ה-נ"צ'
 BOUNDARY_MIN_RATIO = 0.5
 
 
@@ -80,6 +81,18 @@ def load_section_titles(stage1_path, booklet):
       value = row[cols[TITLES_COL_HEADER] - 1].value
       return [t.strip() for t in value.split(";") if t.strip()] if value else []
   return []
+
+
+def load_coord_forms(stage1_path, booklet):
+  """Coordinate forms printed in this booklet, listed in stage1_input_clean (semicolon-separated); the default forms when none are listed."""
+  wb = openpyxl.load_workbook(stage1_path)
+  ws = wb.worksheets[0]
+  cols = stage1_columns(ws)
+  for row in ws.iter_rows(min_row=2):
+    if str(row[cols[BOOKLET_COL_HEADER] - 1].value) == str(booklet):
+      value = row[cols[COORD_FORMS_COL_HEADER] - 1].value if COORD_FORMS_COL_HEADER in cols else None
+      return tuple(f.strip() for f in value.split(";") if f.strip()) if value else p2.DEFAULT_COORD_FORMS
+  return p2.DEFAULT_COORD_FORMS
 
 
 def load_start_page(stage1_path, booklet):
@@ -208,7 +221,7 @@ def resolve_category(value, carried):
   return carried if value == p2.PENDING_CATEGORY else value
 
 
-def reconcile_pages(work, total, first=1, bounds=None):
+def reconcile_pages(work, total, first=1, bounds=None, pdf_path=None, forms=p2.DEFAULT_COORD_FORMS):
   """Walk stored page results in order, resolving carried categories and cross-page open entries, then keep only the names list."""
   entries = []
   warnings = []
@@ -245,8 +258,10 @@ def reconcile_pages(work, total, first=1, bounds=None):
   if bounds:
     entries, bound_warnings = trim_to_list(entries, bounds)
     warnings.extend(bound_warnings)
+  if pdf_path:
+    warnings.extend(p2.resolve_coords(entries, pdf_path, work, forms))
   warnings.extend(p2.check_name_gaps(entries))
-  warnings.extend(p2.check_coords_format(entries))
+  warnings.extend(p2.check_coords_format(entries, forms))
   return entries, warnings
 
 
@@ -292,7 +307,7 @@ def main():
         print(line)
         sys.stdout.flush()
   done = [p for p in range(1, total + 1) if os.path.exists(page_result_path(work, p))]
-  entries, warnings = reconcile_pages(work, last, first, bounds)
+  entries, warnings = reconcile_pages(work, last, first, bounds, pdf_path, load_coord_forms(args["--stage1"], args["--booklet"]))
   verified = load_verified_count(args["--stage1"], args["--booklet"])
   if verified is not None and verified != len(entries):
     warnings.append({"page": "-", "column": "-", "type": "entry-count-mismatch", "text": "%d entries, %d verified" % (len(entries), verified)})

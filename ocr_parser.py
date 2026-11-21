@@ -41,7 +41,9 @@ PREFIX_WORDS = {'מ"א', 'ד"נ', "מ״א", "ד״נ", "מ*א", "ד*נ", "מ'א",
 MOVEMENT_RE = re.compile(r"(?:משקי\s+)?תנועת\s+(.+?)(?:,|\s+ב[א-ת]{2,}|\s*\(|\.)")
 COORDS_RE = re.compile(r"(?:[נגב][\"*׳״'”“]?\s?|[\"*׳״'”“])צ\s*[.,:]?\s*(\d{2,6})(?:\s*[.,;:\N{EN DASH}\N{EM DASH}-]{0,2}\s*(\d{2,6}))?")
 BARE_COORDS_RE = re.compile(r"^\W*(\d{3,4})[.,]?(\d{3,4})\b")
-COORDS_OK_RE = re.compile(r"^\d{3}\.\d{3}$|^\d{4}\.\d{4}$")
+COORDS_SHAPE_RE = re.compile(r"^(\d{2,5})\.(\d{2,5})$")
+DEFAULT_COORD_FORMS = ("3+3", "4+4")
+UNBALANCED_COORD_FORM = "לא מאוזן"
 CATEGORY_KEYWORDS = [
   ("מועצות אזוריות", ["מועצות אזוריות", "למועצות"]),
   ("ישובים", ["ליישובים", "לישובים", "ישובים ובכללם"]),
@@ -296,16 +298,24 @@ def normalize_coords(first, second):
   return first
 
 
-def coords_well_formed(coords):
-  """True when a coordinate string has the expected nnn.nnn or nnnn.nnnn shape."""
-  return bool(coords) and COORDS_OK_RE.match(coords) is not None
+def coords_well_formed(coords, forms=DEFAULT_COORD_FORMS):
+  """True when a coordinate string has one of the booklet's printed forms (`3+3`, `4+4`, `6` for six digits without a separator, or unbalanced)."""
+  m = COORDS_SHAPE_RE.match(coords or "")
+  if not m:
+    return False
+  first, second = len(m.group(1)), len(m.group(2))
+  if first != second:
+    return UNBALANCED_COORD_FORM in forms
+  return "%d+%d" % (first, second) in forms or (first == 3 and "6" in forms)
 
 
-def normalize_grid_reference(coords):
-  """Pad each half of a well-formed grid reference with trailing zeros to six digits (metres)."""
-  if not coords_well_formed(coords):
+def normalize_grid_reference(coords, forms=DEFAULT_COORD_FORMS):
+  """Pad each half of a balanced grid reference in the booklet's forms with trailing zeros to six digits (metres)."""
+  if not coords_well_formed(coords, forms):
     return None
   halves = coords.split(".")
+  if len(halves[0]) != len(halves[1]):
+    return None
   return "%s/%s" % (halves[0].ljust(6, "0"), halves[1].ljust(6, "0"))
 
 

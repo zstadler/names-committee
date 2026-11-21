@@ -9,17 +9,33 @@
 18,right,large-gap-continuation,ד כן
 22,-,gutter-fallback,slice 0
 22,left,large-gap-continuation,-
-6,left,coords-format,כַלֶנית: 930.2535
-6,left,coords-format,כסִיפָה: 15800.07125
-9,left,coords-format,פלך: 1724.260
-11,right,coords-format,רְמוּת: 1213.251
-12,right,coords-format,תמר: 19175.15825
-12,left,coords-format,"סקואַ לה"" 6: 17174.11752"
-12,left,coords-format,בית חורון עליון: 1610.14
-14,right,coords-format,חֶרֶשַת טל: 211.91
-16,left,coords-format,הר אַגָס: 2185.800
-20,left,coords-format,הר צַרור: 132.0800
-23,right,coords-format,צומת דֶליות: 223.2559
-23,left,coords-format,צומת בָּר אִילֶן: 1348.168
-23,left,coords-format,צומת רעְננה: 1896.17601
-24,left,coords-format,צומת דימר;ה: 1505.05340
+12,left,coords-uncertain,בית חורון עליון: 1610.14 (text layer: 1610.1436)
+13,left,coords-uncertain,מצד וֶרקְעֶם: 1594.0889 (text layer: 1534.0389)
+14,right,coords-uncertain,נחַל עיון: 204.207 (text layer: 204.297)
+14,right,coords-uncertain,חֶרֶשַת טל: 211.91 (text layer: 211.291)
+16,left,coords-uncertain,הר אַגָס: 2185.800 (text layer: 215.300)
+17,right,coords-from-text-layer,הר וַרדָה: 224.290 (regular reading: None)
+17,right,coords-uncertain,שלוחת שריון: 2160.2995 (text layer: 2157.3006)
+17,left,coords-from-text-layer,גבעת ;טור: 220.252 (regular reading: None)
+19,left,coords-from-text-layer,"בקעת הוךזקו,'.:ה: 187.125 (regular reading: None)"
+19,left,coords-from-text-layer,עינות פכז?ר: 189.113 (regular reading: None)
+19,left,coords-from-text-layer,עינות צרקי'ם: 193.124 (regular reading: None)
+20,right,coords-uncertain,נחל קנה: 188.114 (text layer: 185.114)
+20,left,coords-uncertain,הר צַרור: 132.0800 (text layer: 132.030)
+22,right,coords-uncertain,מחלף נַתָניָה: 1377.1928 (text layer: 1377.1923)
+22,left,coords-uncertain,מחלף הַרְצֶלִיָה: 1926.1747 (text layer: 1326.1747)
+22,left,coords-uncertain,מחלף ‏ חמד: 1620.1343 (text layer: 11620.1343)
+22,left,coords-uncertain,צומת [ְגור: 1575.2889 (text layer: 1575.2389)
+22,left,coords-uncertain,צומת אֶפיק: 2170.2428 (text layer: 70.2428)
+23,right,coords-from-text-layer,צומת כְמָר תְבור: 1898.2330 (regular reading: None)
+23,right,coords-uncertain,צומת חבצלת: 1375.1963 (text layer: 1375.1965)
+23,left,coords-uncertain,צומת בָּר אִילֶן: 1348.168 (text layer: 1348.1638)
+23,left,coords-uncertain,צומת יהוד: 1388.1694 (text layer: 1388.1594)
+23,left,coords-uncertain,צומת מורשָה: 1366.1703 (text layer: 1365.1703)
+23,left,coords-uncertain,צומת רעְננה: 1896.17601 (text layer: 1396.1761)
+24,right,coords-uncertain,"צומת עד""הַלום: 1185.1307 (text layer: 1185.4307)"
+24,right,coords-uncertain,צומת נחושה: 1407.1134 (text layer: 14107.1134)
+24,right,coords-uncertain,צומת ‏ מבטתים: 9931.0742 (text layer: 0931.0742)
+24,right,coords-uncertain,צומת הַתרורים: 1736.0697 (text layer: 4736.0697)
+24,left,coords-uncertain,"צומת ‏ מבצע.:עִין"": 0652.0285 (text layer: 10652.0285)"
+24,left,coords-uncertain,צומת דימר;ה: 1505.05340 (text layer: 1505.0530)

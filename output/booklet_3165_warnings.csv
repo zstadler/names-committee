@@ -1,5 +1,20 @@
 עמוד,טור,סוג,טקסט
 2,-,gutter-fallback,slice 0
+2,left,coords-from-text-layer,ז 'ל: 1792.1753 (regular reading: None)
+6,right,coords-from-text-layer,לְבון: 178.261 (regular reading: None)
+7,right,coords-from-text-layer,"מצפה אָבי""ב: 169.249 (regular reading: None)"
+7,right,coords-from-text-layer,מצר (מיצר): 219.241 (regular reading: None)
+7,left,coords-from-text-layer,נוקדים: 1745.1173 (regular reading: None)
+12,left,coords-from-text-layer,"שמורת אל""עָל: 220.247 (regular reading: None)"
+13,left,coords-uncertain,שמורת נוטר: 1990.1925 (text layer: 1590.1925)
+14,right,coords-uncertain,"שמורת נחל*""ערוגות העלי: 130.098 (text layer: 180.098)"
+15,right,coords-from-text-layer,גבעת עדן: 1455.2215 (regular reading: 2215)
+15,right,coords-from-text-layer,מישור דבר (דובר): 195.131 (regular reading: None)
+16,right,coords-from-text-layer,בקעת תמנע: 1465.9115 (regular reading: None)
+17,left,coords-uncertain,צמת קסם: 1442.1692 (text layer: 1442.16)
+17,left,coords-uncertain,צמת שילת: 1518.1462 (text layer: 518.1462)
+17,left,coords-uncertain,צמת ראש העין: 1440.1671 (text layer: 1440.167)
+18,left,coords-uncertain,מחלף הראל: 164.124 (text layer: 164.134)
 2,right,name-gap-suspicious,730px between 'אביאל' and 'אבינעם' (typical 311)
 2,left,name-gap-suspicious,624px between 'אבירים' and 'אבשלום' (typical 311)
 3,right,name-gap-suspicious,612px between 'אמתי' and 'אספר' (typical 311)
@@ -14,26 +29,3 @@
 10,right,name-gap-suspicious,611px between 'טדמות מחוּלֶה' and 'שומריה' (typical 311)
 10,right,name-gap-suspicious,606px between 'שטים' and 'שילה' (typical 311)
 13,right,name-gap-suspicious,684px between 'שמורת נחל רַבָה' and 'שמורת אלוני תל-תפוח' (typical 311)
-3,left,coords-format,בני עצמון: 078.0820
-4,left,coords-format,ורד יריחו: 190.1375
-5,left,coords-format,כפר אדמים: 18205.13704
-6,right,coords-format,כרמל: 167.0935
-6,right,coords-format,מחנה גבעון: 16635.1401
-9,left,coords-format,שדי אבךוֹ;ם: 0869.06925
-11,right,coords-format,חרבת חברא: 12855.13880
-11,left,coords-format,שמורת נחל חֶצור: 1985.271
-12,left,coords-format,שמורת איי חוף-אכזיב: 1575.273
-13,right,coords-format,שמורת נחל בזק עלי: 187.1967
-13,right,coords-format,"שמורת הר""גדיר: 188.1918"
-14,left,coords-format,שמורת אירוס יִרחֶם: 147.0482
-14,left,coords-format,מפל גִמַלֶא: 22027.25794
-14,left,coords-format,עין-יפּעִם: 17250.26315
-15,right,coords-format,"עין""סמוכָה: 19045.26245"
-15,right,coords-format,גבעת עדן: 2215
-15,right,coords-format,עיןיחסד: 18620.26530
-15,right,coords-format,עיןדלביאה: 18695.26090
-18,left,coords-format,חַרבת פורֶן: 2203.284
-18,left,coords-format,חַרבַת צרמֶן: 229.2782
-19,right,coords-format,חֶרבַת חשניה: 226.2675
-19,right,coords-format,חְרבַת כָנֶף: 2143.253
-19,left,coords-format,חֶרבַת שבעָא: 2128.296
